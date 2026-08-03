@@ -11,6 +11,16 @@ set -a; . ./.env; set +a
 
 mkdir -p letsencrypt certbot-www
 
+# acl.conf پیش‌فرض همه را رد می‌کند. اگر یادت رفته باشد IP اضافه کنی، استک
+# بالا می‌آید ولی هر درخواستی ۴۰۳ می‌گیرد و ساعت‌ها دنبال باگ می‌گردی.
+if ! grep -Eq '^[[:space:]]*[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+[[:space:]]+0;' nginx/acl.conf \
+   || [[ $(grep -Ec '^[[:space:]]*[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+[[:space:]]+0;' nginx/acl.conf) -le 2 ]]; then
+  echo "⚠️  در nginx/acl.conf هنوز IP سروری اضافه نکرده‌ای."
+  echo "    استک بالا می‌آید ولی همه‌ی درخواست‌ها ۴۰۳ می‌گیرند."
+  read -rp "    ادامه بدهم؟ [y/N] " ans
+  [[ "$ans" == [yY] ]] || exit 1
+fi
+
 CERT_DIR="letsencrypt/live/$MIRROR_DOMAIN"
 if [[ ! -f "$CERT_DIR/fullchain.pem" ]]; then
   echo "→ گواهی موقت self-signed تا nginx بتواند بالا بیاید"
@@ -27,9 +37,12 @@ docker compose up -d nginx
 if [[ "${SELF_SIGNED:-0}" == "1" ]]; then
   echo "→ گرفتن گواهی واقعی از Let's Encrypt"
   rm -rf "$CERT_DIR"
+  # CERT_EXTRA_DOMAINS در .env اگر push.<domain> یا ساب‌دامین دیگری می‌خواهی
+  EXTRA=()
+  for d in ${CERT_EXTRA_DOMAINS:-}; do EXTRA+=(-d "$d"); done
   docker compose run --rm --entrypoint certbot certbot certonly \
     --webroot -w /var/www/certbot \
-    -d "$MIRROR_DOMAIN" -d "docker.$MIRROR_DOMAIN" \
+    -d "$MIRROR_DOMAIN" -d "docker.$MIRROR_DOMAIN" ${EXTRA[@]+"${EXTRA[@]}"} \
     --email "$LETSENCRYPT_EMAIL" --agree-tos --no-eff-email -n
   docker compose restart nginx
 fi

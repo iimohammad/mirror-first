@@ -22,8 +22,12 @@
 cp .env.example .env && nano .env        # دامنه، ایمیل، اکانت داکرهاب
 nano nginx/acl.conf                      # ⬅️ IP سرورهایت را اضافه کن (اجباری)
 ./bootstrap.sh                           # گواهی TLS + بالا آوردن استک
-./provision.sh                           # ساخت همه‌ی ریپازیتوری‌ها
+./provision.sh                           # ساخت ریپوهای proxy و group
+./provision-hosted.sh                    # اختیاری: انتشار پکیج‌های خودت
 ```
+
+راهنمای کامل دیپلوی، بکاپ، به‌روزرسانی و عیب‌یابی: **[DEPLOY.md](DEPLOY.md)**
+مدیریت پکیج‌ها (انتشار، حذف، کنترل upstream): **[PACKAGES.md](PACKAGES.md)**
 
 `bootstrap.sh` رمز اولیه‌ی `admin` را چاپ می‌کند. بعد از ورود به پنل:
 
@@ -44,8 +48,8 @@ sudo MIRROR_DOMAIN=mirror.example.com ./client/setup-client.sh all
 |---|---|
 | Docker | `/etc/docker/daemon.json` → `{"registry-mirrors":["https://docker.mirror.example.com"]}` |
 | containerd/k8s | `/etc/containerd/certs.d/<upstream>/hosts.toml` |
-| pip | `index-url = https://mirror.example.com/repository/pypi-proxy/simple` |
-| npm | `registry=https://mirror.example.com/repository/npm-proxy/` |
+| pip | `index-url = https://mirror.example.com/repository/pypi-group/simple` |
+| npm | `registry=https://mirror.example.com/repository/npm-group/` |
 | Go | `GOPROXY=https://mirror.example.com/repository/go-proxy,direct` و `GOSUMDB=off` |
 | apt | `deb https://mirror.example.com/repository/apt-ubuntu-noble/ noble main …` |
 

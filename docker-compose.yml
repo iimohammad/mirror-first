@@ -31,13 +31,17 @@ services:
     volumes:
       - nexus_data:/nexus-data
     networks: [mirror]
+    # فقط روی لوپ‌بک همین سرور. از بیرون در دسترس نیست؛ اما provision.sh و
+    # provision-hosted.sh (که REST API را صدا می‌زنند) به آن نیاز دارند و
+    # می‌خواهیم از allowlist و TLS رد نشوند.
+    ports:
+      - "127.0.0.1:8081:8081"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8081/service/rest/v1/status"]
       interval: 30s
       timeout: 10s
       retries: 20
       start_period: 180s
-    # هیچ ports: عمداً نیست — دسترسی فقط از طریق nginx
 
   nginx:
     image: nginx:1.27-alpine
@@ -55,6 +59,8 @@ services:
     volumes:
       - ./nginx/templates:/etc/nginx/templates:ro
       - ./nginx/acl.conf:/etc/nginx/conf.d/00-acl.conf:ro
+      # حلقه‌ی reload تا گواهی تمدیدشده بدون restart دستی برداشته شود
+      - ./nginx/docker-entrypoint.d/99-cert-reload.sh:/docker-entrypoint.d/99-cert-reload.sh:ro
       - ./letsencrypt:/etc/letsencrypt:ro
       - ./certbot-www:/var/www/certbot
     networks: [mirror]

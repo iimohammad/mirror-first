@@ -31,17 +31,30 @@ req() { # method path [body]
        ${3:+-d "$3"}
 }
 
+# پیام خطای Nexus برای «از قبل هست» یکدست نیست — بسته به مورد یکی از این‌هاست:
+#   400 + "found duplicated key ..."            (متن خام OrientDB)
+#   400 + "Port must be unique (conflicts ...)" (کانکتور داکر)
+#   500 + ORecordDuplicatedException
+# هیچ‌کدام کلمه‌ی already/exists ندارند، پس به‌جای حدس زدن از روی متن، قبل از
+# POST مستقیم می‌پرسیم ریپو هست یا نه.
+repo_exists() { # name
+  local code
+  code=$(curl -sS -o /dev/null -w '%{http_code}' \
+         -u "$NEXUS_USER:$NEXUS_PASS" "$API/repositories/$1")
+  [[ "$code" == "200" ]]
+}
+
 mkrepo() { # label path body
-  local label="$1" path="$2" body="$3" code
+  local label="$1" path="$2" body="$3" code name
+  name=$(printf '%s' "$body" | sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+  if [[ -n "$name" ]] && repo_exists "$name"; then
+    printf '  • %s (از قبل هست)\n' "$label"
+    return
+  fi
   code=$(req POST "/repositories/$path" "$body")
   case "$code" in
-    201) printf '  ✔ %s\n' "$label" ;;
-    400) if grep -qi 'already\|in use\|exist' "$TMP"; then
-           printf '  • %s (از قبل هست)\n' "$label"
-         else
-           printf '  ✘ %s → %s\n%s\n' "$label" "$code" "$(cat "$TMP")"
-         fi ;;
-    *)   printf '  ✘ %s → %s\n%s\n' "$label" "$code" "$(cat "$TMP")" ;;
+    200|201|204) printf '  ✔ %s\n' "$label" ;;
+    *)           printf '  ✘ %s → %s\n%s\n' "$label" "$code" "$(cat "$TMP")" ;;
   esac
 }
 
@@ -124,6 +137,18 @@ mkrepo "npm-proxy"  "npm/proxy"  \
   "{\"name\":\"npm-proxy\",$(proxy_body 'https://registry.npmjs.org' 1440 60 "$HTTP"),\"npm\":{\"removeQuarantined\":false}}"
 mkrepo "go-proxy"   "go/proxy"   \
   "{\"name\":\"go-proxy\",$(proxy_body 'https://proxy.golang.org/' 1440 60 "$HTTP")}"
+
+# ---------------------------------------------------------------------------
+# گروه‌ها را همین حالا می‌سازیم — حتی وقتی هنوز ریپوی hosted نداری — تا
+# کلاینت‌ها از روز اول به group وصل شوند و بعداً که provision-hosted.sh را
+# زدی لازم نباشد پیکربندی هیچ سروری عوض شود. آن اسکریپت فقط hosted را به
+# همین گروه‌ها اضافه می‌کند.
+echo "→ گروه‌های pypi/npm (نقطه‌ی ورود ثابت برای کلاینت‌ها)"
+GSTORAGE='"storage":{"blobStoreName":"default","strictContentTypeValidation":true}'
+mkrepo "pypi-group" "pypi/group" \
+  "{\"name\":\"pypi-group\",\"online\":true,$GSTORAGE,\"group\":{\"memberNames\":[\"pypi-proxy\"]}}"
+mkrepo "npm-group"  "npm/group"  \
+  "{\"name\":\"npm-group\",\"online\":true,$GSTORAGE,\"group\":{\"memberNames\":[\"npm-proxy\"]}}"
 
 echo
 echo "تمام شد. حالا در پنل این دو مورد را ست کن:"

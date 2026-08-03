@@ -39,7 +39,16 @@ docker pull docker.mirror.example.com/library/postgres:16
 
 ## ۲. پکیج خودت — این جایی است که آپلود می‌کنی
 
-اول یک بار `./provision-hosted.sh` را اجرا کن تا ریپوهای hosted و group ساخته شوند.
+`provision.sh` گروه‌ها را از همان اول می‌سازد (فعلاً فقط با عضو proxy)، پس
+کلاینت‌ها از روز اول به group وصل‌اند. `provision-hosted.sh` ریپوهای hosted را
+می‌سازد و **به همان گروه‌ها اضافه می‌کند** — یعنی بعد از انتشار پکیج خودت لازم
+نیست پیکربندی هیچ سروری را عوض کنی.
+
+اگر هنوز نزده‌ای:
+
+```bash
+./provision-hosted.sh
+```
 
 ### PyPI
 
@@ -74,6 +83,18 @@ npm publish --registry https://mirror.example.com/repository/npm-hosted/
 
 ### Docker
 
+push به هاست‌نیم جدا می‌رود، چون Nexus اجازه‌ی push به ریپوی group نمی‌دهد.
+این هاست پیش‌فرض غیرفعال است؛ یک بار فعالش کن:
+
+```bash
+cp nginx/optional/21-docker-push.conf.template nginx/templates/
+docker compose run --rm --entrypoint certbot certbot certonly \
+  --webroot -w /var/www/certbot --expand \
+  -d mirror.example.com -d docker.mirror.example.com -d push.mirror.example.com \
+  --email you@example.com --agree-tos -n
+docker compose restart nginx
+```
+
 ```bash
 docker login push.mirror.example.com -u deployer
 docker tag myapp:1.2.0 push.mirror.example.com/myapp:1.2.0
@@ -98,6 +119,22 @@ curl -u deployer:PASS -X POST \
   "https://mirror.example.com/service/rest/v1/components?repository=pypi-hosted" \
   -F "pypi.asset=@dist/my_lib-1.0-py3-none-any.whl"
 ```
+
+موفقیت یعنی `204`.
+
+### نسخه‌ها غیرقابل بازنویسی‌اند
+
+ریپوهای hosted با `writePolicy=ALLOW_ONCE` ساخته می‌شوند. آپلود دوباره‌ی
+**همان نسخه** رد می‌شود:
+
+```
+HTTP 400  Repository does not allow updating assets: pypi-hosted
+```
+
+این عمدی است — جلوی این را می‌گیرد که یک بیلد خراب، نسخه‌ای را که سرورها
+قبلاً کش کرده‌اند بی‌سروصدا عوض کند. برای انتشار مجدد، شماره‌ی نسخه را بالا ببر.
+اگر واقعاً بازنویسی می‌خواهی، `provision-hosted.sh` را با
+`WRITE_POLICY=ALLOW` اجرا کن.
 
 ---
 
