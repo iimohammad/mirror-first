@@ -1,0 +1,81 @@
+name: nexus-mirror
+
+# ---------------------------------------------------------------------------
+# سرور میرور بر پایه Sonatype Nexus Repository
+# روی یک VPS خارج از فیلتر (ترکیه / آلمان / هلند) بالا می‌آید.
+# Nexus هیچ پورتی مستقیم پابلیک نمی‌کند؛ فقط از پشت nginx.
+# ---------------------------------------------------------------------------
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  nexus:
+    # ⚠️ قبل از اجرا آخرین تگ پایدار را چک کن: hub.docker.com/r/sonatype/nexus3/tags
+    #    3.70.1 آخرین نسخه‌ی خط OrientDB است و بدون تنظیم اضافه بالا می‌آید.
+    #    از 3.71 به بعد دیتابیس H2/PostgreSQL است؛ NEXUS_DATASTORE_ENABLED را true بگذار.
+    image: sonatype/nexus3:${NEXUS_VERSION:-3.70.1}
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      # حداقل ۴ گیگ رم لازم دارد. روی سرور ۸ گیگ این مقادیر خوب‌اند.
+      INSTALL4J_ADD_VM_PARAMS: >-
+        -Xms2703m -Xmx2703m
+        -XX:MaxDirectMemorySize=2703m
+        -Djava.util.prefs.userRoot=/nexus-data/javaprefs
+      # برای 3.71+ این خط را از کامنت دربیاور:
+      # NEXUS_DATASTORE_ENABLED: "true"
+    volumes:
+      - nexus_data:/nexus-data
+    networks: [mirror]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/service/rest/v1/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 180s
+    # هیچ ports: عمداً نیست — دسترسی فقط از طریق nginx
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    logging: *default-logging
+    depends_on: [nexus]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      MIRROR_DOMAIN: "${MIRROR_DOMAIN:?MIRROR_DOMAIN را در .env تنظیم کن}"
+      # فقط متغیرهای MIRROR_* جایگزین شوند، وگرنه envsubst
+      # متغیرهای خود nginx مثل $host و $remote_addr را هم می‌خورد
+      NGINX_ENVSUBST_FILTER: "MIRROR_"
+    volumes:
+      - ./nginx/templates:/etc/nginx/templates:ro
+      - ./nginx/acl.conf:/etc/nginx/conf.d/00-acl.conf:ro
+      - ./letsencrypt:/etc/letsencrypt:ro
+      - ./certbot-www:/var/www/certbot
+    networks: [mirror]
+
+  certbot:
+    image: certbot/certbot:v2.11.0
+    restart: unless-stopped
+    logging: *default-logging
+    volumes:
+      - ./letsencrypt:/etc/letsencrypt
+      - ./certbot-www:/var/www/certbot
+    entrypoint: >
+      sh -c 'trap exit TERM;
+      while :; do
+        certbot renew --webroot -w /var/www/certbot --quiet;
+        sleep 12h & wait $${!};
+      done'
+
+networks:
+  mirror:
+    driver: bridge
+
+volumes:
+  nexus_data:
