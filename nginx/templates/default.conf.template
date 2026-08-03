@@ -19,3 +19,17 @@ server {
 
     location / { return 444; }
 }
+
+# بدون این، یک درخواست HTTPS به آی‌پی خام یا بدون SNI به اولین server block
+# روی 443 می‌افتد — یعنی vhost اصلی Nexus (ACL همچنان اعمال می‌شود، پس این
+# یک باگ امنیتی نیست، ولی سرور را با هیچ Host شناخته‌شده‌ای هم پاسخ‌گو
+# نگه می‌دارد که لازم نیست).
+server {
+    listen      443 ssl default_server;
+    http2 on;
+    server_name _;
+
+    include /etc/nginx/conf.d/90-ssl.inc;
+
+    return 444;
+}

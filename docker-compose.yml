@@ -20,12 +20,13 @@ services:
     image: sonatype/nexus3:${NEXUS_VERSION:-3.70.1}
     restart: unless-stopped
     logging: *default-logging
+    # این مقادیر برای سرور ۸ گیگ کالیبره شده‌اند (heap+direct=۵.۴ گیگ، به‌علاوه
+    # metaspace/thread stack/سربار OS) — روی ۴ گیگ عملاً OOM می‌کند. روی سرور
+    # کوچک‌تر، NEXUS_JVM_ARGS و NEXUS_MEM_LIMIT را در .env متناسب کم کن.
+    mem_limit: ${NEXUS_MEM_LIMIT:-6g}
     environment:
-      # حداقل ۴ گیگ رم لازم دارد. روی سرور ۸ گیگ این مقادیر خوب‌اند.
       INSTALL4J_ADD_VM_PARAMS: >-
-        -Xms2703m -Xmx2703m
-        -XX:MaxDirectMemorySize=2703m
-        -Djava.util.prefs.userRoot=/nexus-data/javaprefs
+        ${NEXUS_JVM_ARGS:--Xms2703m -Xmx2703m -XX:MaxDirectMemorySize=2703m -Djava.util.prefs.userRoot=/nexus-data/javaprefs}
       # برای 3.71+ این خط را از کامنت دربیاور:
       # NEXUS_DATASTORE_ENABLED: "true"
     volumes:

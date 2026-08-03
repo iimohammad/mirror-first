@@ -78,8 +78,26 @@ proxy_body() { # remoteUrl contentMaxAge metadataMaxAge httpClientJson
 echo "→ فعال‌سازی دسترسی ناشناس و رئالم توکن داکر"
 req PUT "/security/anonymous" \
     '{"enabled":true,"userId":"anonymous","realmName":"NexusAuthorizingRealm"}' >/dev/null
-req PUT "/security/realms/active" \
-    '["NexusAuthenticatingRealm","NexusAuthorizingRealm","DockerToken"]' >/dev/null
+
+# جایگزینی کامل لیست رئالم‌ها با یک آرایه‌ی هاردکد در بعضی نسخه‌های Nexus
+# با «Unknown realmIds» رد می‌شود، چون رئالم‌های پایه از این مسیر
+# toggle نمی‌شوند. به‌جایش لیست فعلی را می‌خوانیم و فقط DockerToken را
+# اگر نبود اضافه می‌کنیم — بدون Docker pull از میرور همیشه 401 می‌گیرد.
+CUR_REALMS=$(curl -sS -u "$NEXUS_USER:$NEXUS_PASS" "$API/security/realms/active" | tr -d ' \t\n\r')
+if [[ "$CUR_REALMS" != *'"DockerToken"'* ]]; then
+  if [[ -z "$CUR_REALMS" || "$CUR_REALMS" == "[]" ]]; then
+    NEW_REALMS='["DockerToken"]'
+  else
+    NEW_REALMS="${CUR_REALMS%]},\"DockerToken\"]"
+  fi
+  code=$(req PUT "/security/realms/active" "$NEW_REALMS")
+  case "$code" in
+    200|204) printf '  ✔ رئالم DockerToken فعال شد\n' ;;
+    *)       printf '  ✘ فعال‌سازی رئالم DockerToken → %s\n%s\n' "$code" "$(cat "$TMP")" ;;
+  esac
+else
+  printf '  • رئالم DockerToken (از قبل فعال است)\n'
+fi
 
 # ---------------------------------------------------------------------------
 echo "→ رجیستری‌های داکر"
@@ -113,6 +131,12 @@ do
   mkrepo "$name" "apt/proxy" \
     "{\"name\":\"$name\",$(proxy_body "$url" 1440 60 "$HTTP"),\"apt\":{\"distribution\":\"$dist\",\"flat\":false}}"
 done
+
+# آرشیو امنیتی دبیان روی سرور و مسیر جدایی است (بر خلاف اوبونتو که -security
+# را از همان archive.ubuntu.com سرو می‌کند)؛ بدون این، client/setup-client.sh
+# نمی‌تواند bookworm-security را از میرور بیاورد.
+mkrepo "apt-debian-bookworm-security" "apt/proxy" \
+  "{\"name\":\"apt-debian-bookworm-security\",$(proxy_body 'http://security.debian.org/debian-security/' 1440 60 "$HTTP"),\"apt\":{\"distribution\":\"bookworm-security\",\"flat\":false}}"
 
 # ---------------------------------------------------------------------------
 echo "→ مخازن raw (suite-agnostic؛ برای ریپوهای HTTPS شخص ثالث و فایل‌ها)"

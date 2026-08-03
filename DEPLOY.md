@@ -26,7 +26,7 @@ nginx/optional/               کانکتور push داکر، پیش‌فرض غ�
 
 | مورد | حداقل | توضیح |
 |---|---|---|
-| رم | ۴ گیگ | ۸ توصیه می‌شود. Nexus روی JVM است و با ۲ گیگ OOM می‌شود. |
+| رم | ۶ گیگ | ۸ توصیه می‌شود. پیش‌فرض JVM در `docker-compose.yml` برای ۸ گیگ کالیبره شده (heap+direct=۵.۴ گیگ)؛ روی رم کمتر `NEXUS_JVM_ARGS`/`NEXUS_MEM_LIMIT` را در `.env` کم کن. |
 | دیسک | ۱۰۰ گیگ | کش داکر سریع بزرگ می‌شود. |
 | CPU | ۲ هسته | |
 | پورت باز | ۸۰ و ۴۴۳ | ۸۰ برای ACME لازم است، حتی اگر همه‌چیز روی ۴۴۳ باشد. |
@@ -247,6 +247,9 @@ docker compose logs -f --tail=100 nexus
 | apt هنوز کند است | منابع پیش‌فرض غیرفعال نشده‌اند (بخش ۴) |
 | `git clone` کار نمی‌کند | Nexus سرور گیت نیست — به README بخش «نکته‌ی مهم درباره‌ی گیت» |
 | pull از داکرهاب rate limit می‌خورد | `DOCKERHUB_USERNAME/TOKEN` در `.env` خالی است |
+| `docker pull` از میرور ۴۰۱ می‌دهد | رئالم DockerToken فعال نیست؛ دوباره `./provision.sh` بزن |
+| `bootstrap.sh` در CI/غیرتعاملی می‌میرد | `SKIP_ACL_CHECK=1 ./bootstrap.sh` (فقط بعد از اینکه واقعاً IP اضافه کردی) |
+| apt روی Debian کار نمی‌کند | فقط `bookworm` پشتیبانی می‌شود؛ `apt-debian-bookworm(-security)` باید با `./provision.sh` ساخته شده باشد |
 
 بررسی وضعیت استک:
 

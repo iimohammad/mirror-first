@@ -7,14 +7,15 @@
 #
 # متغیرهای اختیاری:
 #   DISABLE_DEFAULT_SOURCES=1   منابع پیش‌فرض apt را کنار می‌گذارد
-#   UBUNTU_CODENAME=jammy       اگر تشخیص خودکار درست نبود
+#   UBUNTU_CODENAME=jammy       اگر تشخیص خودکار درست نبود (فقط اوبونتو)
+#   DEBIAN_CODENAME=bookworm    همان، برای دبیان
 #
 # از هر فایلی که دست بزند اول بکاپ .bak می‌گیرد.
 # ---------------------------------------------------------------------------
 set -euo pipefail
 
 : "${MIRROR_DOMAIN:?MIRROR_DOMAIN را ست کن، مثلا mirror.example.com}"
-UBUNTU_CODENAME="${UBUNTU_CODENAME:-$( . /etc/os-release 2>/dev/null; echo "${VERSION_CODENAME:-noble}" )}"
+UBUNTU_CODENAME="${UBUNTU_CODENAME:-$( . /etc/os-release 2>/dev/null; echo "${VERSION_CODENAME:-}" )}"
 
 backup() { [[ -f "$1" ]] && cp -n "$1" "$1.bak" && echo "   (بکاپ: $1.bak)"; return 0; }
 
@@ -29,7 +30,11 @@ cfg = json.loads(p.read_text()) if p.exists() and p.read_text().strip() else {}
 cfg["registry-mirrors"] = [f"https://docker.{sys.argv[1]}"]
 p.write_text(json.dumps(cfg, indent=2) + "\n")
 PY
-  systemctl restart docker
+  # اگر systemd نیست (کانتینر) یا سرویس هنوز بالا نیامده، restart شکست
+  # می‌خورد؛ نباید کل «all» را با خودش پایین بکشد — کانفیگ که نوشته شد،
+  # کافی است.
+  systemctl restart docker 2>/dev/null || \
+    echo "   ⚠️  نتوانستم docker را ری‌استارت کنم؛ دستی بزن: systemctl restart docker"
   docker info 2>/dev/null | grep -A2 'Registry Mirrors' || true
   echo "   نکته: ایمیج‌های غیر داکرهاب را با اسم میرور بکش، مثلا:"
   echo "     docker pull docker.$MIRROR_DOMAIN/astral-sh/uv:latest   # به‌جای ghcr.io/..."
@@ -53,19 +58,41 @@ EOF
 
 setup_apt() {
   echo "→ apt"
-  backup /etc/apt/sources.list
-  # ⚠️ اضافه کردن این فایل، منابع پیش‌فرض را غیرفعال نمی‌کند. تا وقتی
-  #    ubuntu.sources / sources.list سر جایشان باشند، apt هنوز مستقیم به
-  #    archive.ubuntu.com هم می‌زند و عملاً از میرور رد نمی‌شوی.
-  #    با DISABLE_DEFAULT_SOURCES=1 کنارشان می‌گذاریم.
+  local distro_id
+  distro_id=$( . /etc/os-release 2>/dev/null; echo "$ID" )
+  case "$distro_id" in
+    ubuntu) _setup_apt_ubuntu ;;
+    debian) _setup_apt_debian ;;
+    *)
+      echo "   ✘ توزیع '$distro_id' پشتیبانی نمی‌شود (فقط ubuntu و debian)."
+      return 1
+      ;;
+  esac
+}
+
+# اسم فایلی که DISABLE_DEFAULT_SOURCES باید کنار بگذارد بین توزیع‌ها فرق
+# دارد؛ چک می‌کنیم واقعاً چیزی غیرفعال شد یا نه تا سکوت گمراه‌کننده نباشد.
+_disable_default_apt_sources() { # فایل‌های احتمالی به‌عنوان آرگومان
+  local disabled_any=0
   if [[ "${DISABLE_DEFAULT_SOURCES:-0}" == "1" ]]; then
-    for f in /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
-      [[ -f "$f" ]] && mv "$f" "$f.disabled" && echo "   (غیرفعال شد: $f → $f.disabled)"
+    for f in "$@"; do
+      [[ -f "$f" ]] && mv "$f" "$f.disabled" && echo "   (غیرفعال شد: $f → $f.disabled)" && disabled_any=1
     done
+    [[ "$disabled_any" == "1" ]] || echo "   ⚠️  هیچ فایل منبع پیش‌فرضی برای غیرفعال کردن پیدا نشد."
   else
     echo "   نکته: منابع پیش‌فرض دست‌نخورده ماندند. برای اینکه واقعاً همه‌چیز از"
     echo "   میرور بیاید، دوباره با DISABLE_DEFAULT_SOURCES=1 اجرا کن."
   fi
+}
+
+_setup_apt_ubuntu() {
+  if [[ -z "$UBUNTU_CODENAME" ]]; then
+    echo "   ✘ VERSION_CODENAME در /etc/os-release پیدا نشد."
+    echo "     دستی بده: UBUNTU_CODENAME=noble $0 apt"
+    return 1
+  fi
+  backup /etc/apt/sources.list
+  _disable_default_apt_sources /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources
   cat > /etc/apt/sources.list.d/mirror.sources <<EOF
 Types: deb
 URIs: https://$MIRROR_DOMAIN/repository/apt-ubuntu-$UBUNTU_CODENAME/
@@ -78,6 +105,49 @@ EOF
      deb [signed-by=/etc/apt/keyrings/docker.asc] \\
        https://$MIRROR_DOMAIN/repository/raw-docker/linux/ubuntu $UBUNTU_CODENAME stable
 EOF
+}
+
+_setup_apt_debian() {
+  local codename
+  codename="${DEBIAN_CODENAME:-$( . /etc/os-release 2>/dev/null; echo "$VERSION_CODENAME" )}"
+  if [[ -z "$codename" ]]; then
+    echo "   ✘ VERSION_CODENAME در /etc/os-release پیدا نشد."
+    echo "     دستی بده: DEBIAN_CODENAME=bookworm $0 apt"
+    return 1
+  fi
+  if [[ "$codename" != "bookworm" ]]; then
+    echo "   ⚠️  provision.sh فقط برای bookworm ریپو ساخته. با '$codename' ادامه"
+    echo "      می‌دهم ولی تا ریپوی apt-debian-$codename روی سرور خارج نسازی، ۴۰۴ می‌گیری."
+  fi
+
+  # دبیان از bullseye/bookworm به بعد sources.list.d/debian.sources دارد،
+  # نه sources.list یا ubuntu.sources — چک اشتباه یعنی «غیرفعال کردم»
+  # چاپ می‌شود ولی منابع پیش‌فرض دست‌نخورده می‌مانند.
+  backup /etc/apt/sources.list
+  _disable_default_apt_sources /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources
+
+  # non-free-firmware از bookworm (۱۲) به بعد وجود دارد؛ روی نسخه‌های
+  # قدیم‌تر کامپوننتی به همین اسم نیست.
+  local components="main contrib non-free"
+  case "$codename" in
+    bookworm|trixie|forky) components="main contrib non-free non-free-firmware" ;;
+  esac
+
+  cat > /etc/apt/sources.list.d/mirror.sources <<EOF
+Types: deb
+URIs: https://$MIRROR_DOMAIN/repository/apt-debian-$codename/
+Suites: $codename $codename-updates $codename-backports
+Components: $components
+Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+
+Types: deb
+URIs: https://$MIRROR_DOMAIN/repository/apt-debian-$codename-security/
+Suites: $codename-security
+Components: $components
+Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+EOF
+  echo "   نکته: آرشیو امنیتی دبیان روی سرور جدایی است (security.debian.org)،"
+  echo "   نه زیرمجموعه‌ی همان آرشیو اصلی مثل اوبونتو — برای همین یک بلاک جدا گرفت."
 }
 
 setup_pip() {
@@ -96,11 +166,27 @@ EOF
 
 setup_npm() {
   echo "→ npm"
-  backup /etc/npmrc
-  cat > /etc/npmrc <<EOF
+  # مسیر global config npm به prefix نصبش بستگی دارد: پکیج توزیع معمولاً
+  # /etc/npmrc را می‌خواند، ولی نصب دستی (nodejs.org tarball در /usr/local،
+  # nvm و…) جای دیگری را می‌خواند و /etc/npmrc را اصلاً نمی‌بیند. اگر npm
+  # از قبل نصب است، مستقیم از خودش می‌پرسیم.
+  local target="/etc/npmrc"
+  if command -v npm >/dev/null 2>&1; then
+    target=$(npm config get globalconfig 2>/dev/null || echo /etc/npmrc)
+  fi
+  mkdir -p "$(dirname "$target")"
+  backup "$target"
+  cat > "$target" <<EOF
 registry=https://$MIRROR_DOMAIN/repository/npm-group/
 fetch-retries=5
 EOF
+  echo "   نوشته شد در: $target"
+  if [[ "$target" != "/etc/npmrc" ]]; then
+    echo "   (نصب غیر توزیعی node تشخیص داده شد)"
+  elif ! command -v npm >/dev/null 2>&1; then
+    echo "   نکته: npm هنوز نصب نیست؛ اگر بعداً با روشی غیر از پکیج توزیع"
+    echo "   (nvm، tarball رسمی و…) نصبش کردی، همین دستور را دوباره بزن."
+  fi
 }
 
 setup_go() {
@@ -112,9 +198,22 @@ setup_go() {
   cat > /etc/profile.d/go-mirror.sh <<EOF
 export GOPROXY="https://$MIRROR_DOMAIN/repository/go-proxy,direct"
 export GOSUMDB=off
-export GOFLAGS="\${GOFLAGS} -mod=readonly"
+export GOFLAGS="-mod=readonly"
 EOF
-  echo "   (برای اعمال: source /etc/profile.d/go-mirror.sh)"
+  echo "   (شل‌های لاگین: source /etc/profile.d/go-mirror.sh)"
+
+  # /etc/profile.d فقط شل‌های لاگین را می‌گیرد؛ سرویس systemd، cron و
+  # فرمان‌های غیرتعاملی ssh آن را نمی‌خوانند. /etc/environment را PAM برای
+  # اغلب همین مسیرها هم اعمال می‌کند، بدون نیاز به source دستی.
+  backup /etc/environment
+  touch /etc/environment
+  sed -i -E '/^(GOPROXY|GOSUMDB|GOFLAGS)=/d' /etc/environment
+  cat >> /etc/environment <<EOF
+GOPROXY=https://$MIRROR_DOMAIN/repository/go-proxy,direct
+GOSUMDB=off
+GOFLAGS=-mod=readonly
+EOF
+  echo "   (سرویس/ssh غیرتعاملی: از /etc/environment می‌خوانند، نیاز به source ندارد)"
   echo "   نکته: GOSUMDB خاموش شد؛ go.sum پروژه را کامیت‌شده نگه دار."
 }
 
@@ -135,5 +234,19 @@ setup_git() {
 # نیاز دارد، پس جدا صدایش بزن.
 [[ "$1" == "all" ]] && set -- docker apt pip npm go git
 
-for t in "$@"; do "setup_$t"; done
+FAILED=()
+for t in "$@"; do
+  # با set -e، اگر یک هدف شکست بخورد کل اجرای «all» همان‌جا متوقف می‌شود و
+  # بقیه‌ی هدف‌ها (که به این یکی ربطی ندارند) اصلاً اجرا نمی‌شوند. هر هدف را
+  # جدا می‌سنجیم تا یک شکست بقیه را قربانی نکند.
+  if ! "setup_$t"; then
+    echo "   ✘ setup_$t شکست خورد؛ به بعدی می‌روم" >&2
+    FAILED+=("$t")
+  fi
+done
+
+if [[ ${#FAILED[@]} -gt 0 ]]; then
+  echo "تمام، با خطا در: ${FAILED[*]}"
+  exit 1
+fi
 echo "تمام."
