@@ -1,0 +1,11 @@
+# توکن داکرهاب و دامنه اینجاست — هیچ‌وقت کامیت نشود
+.env
+
+# گواهی‌های TLS و کلید خصوصی
+letsencrypt/
+certbot-www/
+
+# اگر به‌جای IP allowlist از Basic Auth استفاده کردی
+nginx/htpasswd
+
+*.bak

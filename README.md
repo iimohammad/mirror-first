@@ -10,7 +10,9 @@
 
 ## پیش‌نیاز
 
-- VPS خارج: **حداقل ۴ گیگ رم (۸ توصیه می‌شود)** — Nexus روی JVM است و کم‌رم نیست.
+- VPS خارج: **حداقل ۶ گیگ رم (۸ توصیه می‌شود)** — تنظیمات پیش‌فرض JVM در
+  `docker-compose.yml` برای ۸ گیگ کالیبره شده‌اند؛ روی رم کمتر باید
+  `NEXUS_JVM_ARGS` را در `.env` متناسب کم کنی (نمونه در `.env.example`).
 - دیسک: از ۱۰۰ گیگ شروع کن. کش داکر سریع بزرگ می‌شود.
 - دو رکورد DNS به IP سرور:
   - `mirror.example.com`
@@ -22,8 +24,12 @@
 cp .env.example .env && nano .env        # دامنه، ایمیل، اکانت داکرهاب
 nano nginx/acl.conf                      # ⬅️ IP سرورهایت را اضافه کن (اجباری)
 ./bootstrap.sh                           # گواهی TLS + بالا آوردن استک
-./provision.sh                           # ساخت همه‌ی ریپازیتوری‌ها
+./provision.sh                           # ساخت ریپوهای proxy و group
+./provision-hosted.sh                    # اختیاری: انتشار پکیج‌های خودت
 ```
+
+راهنمای کامل دیپلوی، بکاپ، به‌روزرسانی و عیب‌یابی: **[DEPLOY.md](DEPLOY.md)**
+مدیریت پکیج‌ها (انتشار، حذف، کنترل upstream): **[PACKAGES.md](PACKAGES.md)**
 
 `bootstrap.sh` رمز اولیه‌ی `admin` را چاپ می‌کند. بعد از ورود به پنل:
 
@@ -44,8 +50,8 @@ sudo MIRROR_DOMAIN=mirror.example.com ./client/setup-client.sh all
 |---|---|
 | Docker | `/etc/docker/daemon.json` → `{"registry-mirrors":["https://docker.mirror.example.com"]}` |
 | containerd/k8s | `/etc/containerd/certs.d/<upstream>/hosts.toml` |
-| pip | `index-url = https://mirror.example.com/repository/pypi-proxy/simple` |
-| npm | `registry=https://mirror.example.com/repository/npm-proxy/` |
+| pip | `index-url = https://mirror.example.com/repository/pypi-group/simple` |
+| npm | `registry=https://mirror.example.com/repository/npm-group/` |
 | Go | `GOPROXY=https://mirror.example.com/repository/go-proxy,direct` و `GOSUMDB=off` |
 | apt | `deb https://mirror.example.com/repository/apt-ubuntu-noble/ noble main …` |
 

@@ -1,0 +1,107 @@
+# ---------------------------------------------------------------------------
+# ورودی اصلی میرور.
+#
+#   mirror.<domain>   → Nexus روی 8081  (UI + همه‌ی /repository/... ها)
+#   docker.<domain>   → کانکتور docker-group روی 5000 (pull)
+#
+# متغیر ${MIRROR_DOMAIN} را entrypoint خود ایمیج nginx با envsubst پر می‌کند.
+# فیلتر NGINX_ENVSUBST_FILTER=MIRROR_ در compose ست شده، پس متغیرهای خود
+# nginx مثل $host و $remote_addr دست‌نخورده می‌مانند.
+#
+# $mirror_denied در 00-acl.conf (همان nginx/acl.conf) تعریف شده.
+# ---------------------------------------------------------------------------
+
+# ---------- HTTP: فقط ACME و ریدایرکت ----------
+server {
+    listen      80;
+    server_name ${MIRROR_DOMAIN} docker.${MIRROR_DOMAIN} push.${MIRROR_DOMAIN};
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# ---------- Nexus: UI و همه‌ی فرمت‌ها (pypi / npm / go / apt / raw) ----------
+server {
+    listen      443 ssl;
+    http2 on;
+    server_name ${MIRROR_DOMAIN};
+
+    include /etc/nginx/conf.d/90-ssl.inc;
+
+    # allowlist؛ پیش‌فرض همه را رد می‌کند تا IP خودت را اضافه کنی.
+    if ($mirror_denied) { return 403; }
+
+    # اگر IP ثابت نداری، به‌جای allowlist این دو خط را باز کن و
+    # htpasswd را در nginx/ بساز و در compose مانتش کن:
+    #   docker run --rm httpd:alpine htpasswd -nb user pass >> nginx/htpasswd
+    # auth_basic           "mirror";
+    # auth_basic_user_file /etc/nginx/conf.d/htpasswd;
+
+    # آپلود پکیج (twine / npm publish / curl --upload-file) سقف حجم ندارد.
+    client_max_body_size 0;
+
+    location / {
+        # proxy_pass با هاست‌نیم لفظی فقط یک‌بار، در لحظه‌ی بالا آمدن/reload
+        # نگین‌اکس، resolve می‌شود. اگر همان لحظه nexus بالا نباشد، کل nginx
+        # (و مسیر ACME روی پورت ۸۰) با «host not found in upstream» بالا
+        # نمی‌آید؛ و بعداً هم آی‌پی را برای همیشه کش می‌کند و با recreate شدن
+        # کانتینر nexus (مثلاً موقع آپگرید) ۵۰۲ دائمی می‌دهد. با resolver +
+        # متغیر، resolve هر بار در زمان درخواست انجام می‌شود.
+        resolver 127.0.0.11 valid=10s;
+        set $nexus_upstream nexus:8081;
+        proxy_pass http://$nexus_upstream;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_http_version 1.1;
+        proxy_buffering    off;
+
+        # دانلود ایمیج/پکیج بزرگ از upstream کند می‌تواند باشد.
+        proxy_connect_timeout 60s;
+        proxy_send_timeout    900s;
+        proxy_read_timeout    900s;
+    }
+}
+
+# ---------- Docker pull: کانکتور docker-group روی 5000 ----------
+server {
+    listen      443 ssl;
+    http2 on;
+    server_name docker.${MIRROR_DOMAIN};
+
+    include /etc/nginx/conf.d/90-ssl.inc;
+
+    # ⚠️ داکر برای registry-mirrors هیچ Basic Auth ای نمی‌فرستد،
+    #    پس روی این هاست فقط IP allowlist کار می‌کند.
+    if ($mirror_denied) { return 403; }
+
+    client_max_body_size 0;
+    chunked_transfer_encoding on;
+
+    location / {
+        resolver 127.0.0.11 valid=10s;
+        set $nexus_upstream nexus:5000;
+        proxy_pass http://$nexus_upstream;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_http_version     1.1;
+        proxy_buffering        off;
+        proxy_request_buffering off;
+
+        proxy_connect_timeout 60s;
+        proxy_send_timeout    900s;
+        proxy_read_timeout    900s;
+    }
+}
