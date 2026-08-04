@@ -9,6 +9,7 @@
 
 ```
 docker-compose.yml            استک: nexus + nginx + certbot + panel
+deploy.sh                     همه‌ی زیر را پشت‌سرهم می‌زند              (روی سرور خارج)
 bootstrap.sh                  گواهی TLS + بالا آوردن استک        (روی سرور خارج)
 provision.sh                  ساخت ریپوهای proxy + group          (روی سرور خارج)
 provision-hosted.sh           ریپوهای hosted + کاربر deployer     (روی سرور خارج)
@@ -59,7 +60,18 @@ curl -fsSL https://get.docker.com | sh
 
 ```bash
 git clone <repo> && cd mirror-first
+./deploy.sh
+```
 
+اگر `.env` نباشد، `deploy.sh` خودش می‌سازدش و فقط دامنه و ایمیل را می‌پرسد
+(`PANEL_SESSION_SECRET` را خودش می‌سازد). بعد پشت‌سرهم `bootstrap.sh` →
+`provision.sh` → `provision-hosted.sh` را می‌زند و رمز اولیه‌ی `admin` را
+خودش برای provisioning می‌گیرد — چیزی برای copy/paste دستی نمی‌ماند به‌جز
+IP allowlist. اجرای دوباره‌اش بی‌خطر است.
+
+اگر ترجیح می‌دهی هر قدم را جدا و با کنترل بیشتر بزنی:
+
+```bash
 cp .env.example .env && nano .env     # MIRROR_DOMAIN، LETSENCRYPT_EMAIL، اکانت داکرهاب
 openssl rand -hex 32                  # نتیجه را PANEL_SESSION_SECRET= در .env بگذار
 nano nginx/acl.conf                   # ⬅️ IP سرورهای ایرانت را اضافه کن (اجباری)
@@ -74,8 +86,9 @@ nano nginx/acl.conf                   # ⬅️ IP سرورهای ایرانت ر
 `docker compose logs panel` crash-loop می‌کند تا وقتی درستش کنی. پنل
 اختیاری است، هیچ‌کدام از اسکریپت‌های دیگر به آن وابسته نیستند.
 
-`bootstrap.sh` اگر ببیند در `acl.conf` هیچ IP ای اضافه نکرده‌ای هشدار می‌دهد.
-جدی بگیرش: بدون آن همه‌چیز بالا می‌آید ولی هر درخواستی ۴۰۳ می‌گیرد.
+`bootstrap.sh` (چه مستقیم چه از داخل `deploy.sh`) اگر ببیند در `acl.conf`
+هیچ IP ای اضافه نکرده‌ای هشدار می‌دهد. جدی بگیرش: بدون آن همه‌چیز بالا
+می‌آید ولی هر درخواستی ۴۰۳ می‌گیرد.
 
 هر سه اسکریپت idempotent هستند — اجرای دوباره‌شان چیزی را خراب نمی‌کند و
 ریپوهای موجود را رد می‌کند.
