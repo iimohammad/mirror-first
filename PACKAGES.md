@@ -16,6 +16,11 @@ pip ──▶ pypi-group ──┬──▶ pypi-hosted   (پکیج‌های خ�
                      └──▶ pypi-proxy ──▶ pypi.org
 ```
 
+> همه‌ی دستورهای جستجو/حذف/آپلود این فایل با curl خام است. اگر پنل
+> (`https://mirror.example.com/panel/`) را بالا آورده‌ای، همین کارها (به‌جز
+> push داکر) از `/panel/packages` و `/panel/upload` هم قابل انجام است —
+> README.md بخش «پنل مدیریت».
+
 ---
 
 ## ۱. پکیج عمومی (مثلاً `requests`) — کاری لازم نیست
@@ -155,6 +160,9 @@ curl -su admin:PASS -X DELETE \
   "https://mirror.example.com/service/rest/v1/components/<ID>"
 ```
 
+یا از پنل: `/panel/packages/pypi-proxy` → جستجوی `django` → حذف. همان کار،
+بدون نیاز به `jq`.
+
 ### باطل کردن کل کش یک proxy
 
 ```bash
@@ -173,6 +181,10 @@ curl -su admin:PASS -X POST \
 2. **Administration → System → Tasks** — این دو تسک را زمان‌بندی کن:
    - `Admin - Cleanup repositories using their associated policies`
    - `Admin - Compact blob store`
+
+مصرف فعلی دیسک و اجرای دستی همین دو تسک از `/panel/disk` هم در دسترس است —
+سیاست پاک‌سازی (مرحله‌ی ۱) را باز هم باید در پنل ادمین Nexus بسازی، پنل
+میرور فقط تسک‌های از-قبل-تعریف‌شده را نشان/اجرا می‌کند.
 
 ---
 

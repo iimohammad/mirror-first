@@ -62,8 +62,36 @@ services:
       - ./nginx/acl.conf:/etc/nginx/conf.d/00-acl.conf:ro
       # حلقه‌ی reload تا گواهی تمدیدشده بدون restart دستی برداشته شود
       - ./nginx/docker-entrypoint.d/99-cert-reload.sh:/docker-entrypoint.d/99-cert-reload.sh:ro
+      # همان، برای وقتی پنل از /panel/ips روی acl.conf می‌نویسد
+      - ./nginx/docker-entrypoint.d/98-acl-reload.sh:/docker-entrypoint.d/98-acl-reload.sh:ro
       - ./letsencrypt:/etc/letsencrypt:ro
       - ./certbot-www:/var/www/certbot
+    networks: [mirror]
+
+  # پنل مدیریت (/panel/) — مدیریت allowlist آی‌پی و پکیج‌ها. پشت همان
+  # nginx و همان allowlist است؛ لاگینش هم یوزر/پس ادمین Nexus را می‌خواهد،
+  # پس دو لایه‌ی محافظت روی هم است.
+  panel:
+    build: ./panel
+    restart: unless-stopped
+    logging: *default-logging
+    depends_on: [nexus]
+    environment:
+      NEXUS_URL: http://nexus:8081
+      # عمداً :? نیست — یک ${VAR:?} در هر جای این فایل کل «docker compose
+      # up» را می‌شکند، حتی وقتی فقط nginx/nexus را می‌خواهی بالا بیاوری و
+      # اصلاً کاری به پنل نداری. اگر خالی بماند، خود کانتینر panel در
+      # instrumentation.ts سریع و با پیام واضح fail می‌کند.
+      PANEL_SESSION_SECRET: "${PANEL_SESSION_SECRET:-}"
+      DATA_DIR: /data
+      ACL_CONF_PATH: /shared/acl.conf
+      NEXUS_DATA_PATH: /nexus-data
+    volumes:
+      - panel_data:/data
+      # همان فایلی که nginx فقط-خواندنی مانتش کرده؛ پنل رویش می‌نویسد.
+      - ./nginx/acl.conf:/shared/acl.conf
+      # فقط برای اندازه‌گیری مصرف دیسک (صفحه‌ی /disk) — read-only.
+      - nexus_data:/nexus-data:ro
     networks: [mirror]
 
   certbot:
@@ -86,3 +114,4 @@ networks:
 
 volumes:
   nexus_data:
+  panel_data:

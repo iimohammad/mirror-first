@@ -8,14 +8,15 @@
 ## ۰. چیدمان مخزن
 
 ```
-docker-compose.yml            استک: nexus + nginx + certbot
+docker-compose.yml            استک: nexus + nginx + certbot + panel
 bootstrap.sh                  گواهی TLS + بالا آوردن استک        (روی سرور خارج)
 provision.sh                  ساخت ریپوهای proxy + group          (روی سرور خارج)
 provision-hosted.sh           ریپوهای hosted + کاربر deployer     (روی سرور خارج)
 client/setup-client.sh        وصل کردن کلاینت‌ها                   (روی سرورهای ایران)
-nginx/acl.conf                allowlist آی‌پی — باید ویرایش شود
+nginx/acl.conf                allowlist آی‌پی — اولین بار دستی، بعد از پنل
 nginx/templates/              کانفیگ nginx (envsubst روی ${MIRROR_DOMAIN})
 nginx/optional/               کانکتور push داکر، پیش‌فرض غیرفعال
+panel/                        اپ مدیریت IP/پکیج‌ها روی /panel/    (خودش build می‌شود)
 ```
 
 مسیرها در `docker-compose.yml` هاردکد شده‌اند؛ فایل‌ها را جابه‌جا نکن.
@@ -60,12 +61,18 @@ curl -fsSL https://get.docker.com | sh
 git clone <repo> && cd mirror-first
 
 cp .env.example .env && nano .env     # MIRROR_DOMAIN، LETSENCRYPT_EMAIL، اکانت داکرهاب
+openssl rand -hex 32                  # نتیجه را PANEL_SESSION_SECRET= در .env بگذار
 nano nginx/acl.conf                   # ⬅️ IP سرورهای ایرانت را اضافه کن (اجباری)
 
-./bootstrap.sh                        # گواهی TLS + بالا آوردن استک
+./bootstrap.sh                        # گواهی TLS + بالا آوردن استک (پنل هم همراهش build می‌شود)
 ./provision.sh                        # ریپوهای proxy و group
 ./provision-hosted.sh                 # اگر می‌خواهی پکیج خودت را هم منتشر کنی
 ```
+
+اگر `PANEL_SESSION_SECRET` را خالی بگذاری، بقیه‌ی استک (nexus/nginx/certbot)
+طبیعی بالا می‌آید — فقط کانتینر `panel` با پیام واضح در
+`docker compose logs panel` crash-loop می‌کند تا وقتی درستش کنی. پنل
+اختیاری است، هیچ‌کدام از اسکریپت‌های دیگر به آن وابسته نیستند.
 
 `bootstrap.sh` اگر ببیند در `acl.conf` هیچ IP ای اضافه نکرده‌ای هشدار می‌دهد.
 جدی بگیرش: بدون آن همه‌چیز بالا می‌آید ولی هر درخواستی ۴۰۳ می‌گیرد.
@@ -250,6 +257,12 @@ docker compose logs -f --tail=100 nexus
 | `docker pull` از میرور ۴۰۱ می‌دهد | رئالم DockerToken فعال نیست؛ دوباره `./provision.sh` بزن |
 | `bootstrap.sh` در CI/غیرتعاملی می‌میرد | `SKIP_ACL_CHECK=1 ./bootstrap.sh` (فقط بعد از اینکه واقعاً IP اضافه کردی) |
 | apt روی Debian کار نمی‌کند | فقط `bookworm` پشتیبانی می‌شود؛ `apt-debian-bookworm(-security)` باید با `./provision.sh` ساخته شده باشد |
+| `/panel/` بالا نمی‌آید (crash-loop) | `PANEL_SESSION_SECRET` در `.env` خالی یا نامعتبر است؛ `docker compose logs panel` پیام دقیق را می‌دهد |
+| لاگین پنل رد می‌شود | باید یوزر/پس یک حساب **ادمین** Nexus باشد، نه `deployer` (که privilege محدود دارد) |
+| تغییر IP در پنل روی سایت اثر نمی‌کند | تا ۵ ثانیه صبر کن (فاصله‌ی poll)؛ اگر بازهم نه، `docker compose logs nginx` را چک کن |
+
+اگر یک بار `nginx/acl.conf` را از پنل دست زدی، دیگر آن را دستی ویرایش نکن —
+اولین تغییر بعدی از پنل، ویرایش دستی‌ات را بی‌سروصدا از بین می‌برد.
 
 بررسی وضعیت استک:
 
@@ -272,6 +285,7 @@ curl -sS -u admin:PASS http://127.0.0.1:8081/service/rest/v1/status/writable
 - [ ] پورت‌های ۸۰۸۱ و ۵۰۰۰ و ۵۰۰۱ پابلیک نیستند — فقط از پشت nginx
 - [ ] فایروال سرور خارج فقط ۸۰ و ۴۴۳ (و SSH) را باز دارد
 - [ ] `NEXUS_VERSION` به‌روز است
+- [ ] `PANEL_SESSION_SECRET` یکتا و تصادفی است (`openssl rand -hex 32`)، نه مقدار نمونه
 
 دسترسی anonymous برای خواندن **عمداً روشن** است — وگرنه باید روی هر کلاینت
 لاگین بگذاری و داکر هم برای `registry-mirrors` احراز هویت نمی‌فرستد. یعنی

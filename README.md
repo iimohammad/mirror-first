@@ -21,9 +21,9 @@
 ## راه‌اندازی
 
 ```bash
-cp .env.example .env && nano .env        # دامنه، ایمیل، اکانت داکرهاب
-nano nginx/acl.conf                      # ⬅️ IP سرورهایت را اضافه کن (اجباری)
-./bootstrap.sh                           # گواهی TLS + بالا آوردن استک
+cp .env.example .env && nano .env        # دامنه، ایمیل، اکانت داکرهاب، PANEL_SESSION_SECRET
+nano nginx/acl.conf                      # ⬅️ IP سرورهایت را اضافه کن (اجباری؛ بعداً از پنل هم می‌شود)
+./bootstrap.sh                           # گواهی TLS + بالا آوردن استک (شامل پنل)
 ./provision.sh                           # ساخت ریپوهای proxy و group
 ./provision-hosted.sh                    # اختیاری: انتشار پکیج‌های خودت
 ```
@@ -69,6 +69,39 @@ docker pull docker.mirror.example.com/astral-sh/uv:latest
 روی k8s این مشکل وجود ندارد؛ `hosts.toml` کانتینردی per-registry mirror را
 درست پشتیبانی می‌کند.
 
+## پنل مدیریت
+
+یک اپ Next.js که با استک بالا می‌آید، پشت همان nginx و همان IP allowlist:
+
+```
+https://mirror.example.com/panel/
+```
+
+لاگینش یوزر/پس **ادمین Nexus** است — حساب جدایی نمی‌سازد، فقط از همانی که
+`bootstrap.sh` چاپ کرده (یا بعداً عوضش کردی) استفاده می‌کند.
+
+چه کاری می‌کند:
+
+- **مدیریت IP** (`/panel/ips`) — به‌جای ویرایش دستی `nginx/acl.conf`، از پنل
+  IP اضافه/حذف کن؛ خودش فایل را می‌سازد و nginx ظرف چند ثانیه reload می‌شود.
+  ⚠️ از این به بعد این فایل را پنل مدیریت می‌کند — ویرایش دستی‌اش با اولین
+  تغییر از پنل از بین می‌رود.
+- **پکیج‌ها** (`/panel/packages`) — فهرست همه‌ی ریپوها (داکر، apt، pypi، npm،
+  go، raw)، جستجو در کامپوننت‌های کش‌شده، حذف یک نسخه‌ی خاص.
+- **آپلود** (`/panel/upload`) — برای pypi/npm/raw hosted. داکر با این روش
+  آپلود نمی‌شود؛ `docker push` بزن (PACKAGES.md).
+- **دیسک** (`/panel/disk`) — مصرف `nexus_data`، وضعیت blob storeها، اجرای
+  دستی تسک‌های Cleanup.
+
+نیاز به یک متغیر در `.env`:
+
+```bash
+openssl rand -hex 32   # PANEL_SESSION_SECRET
+```
+
+جزئیات معماری (چطور IP از پنل به nginx می‌رسد، چرا رمز نکسس در سشن رمزنگاری
+می‌شود) در [`panel/README.md`](panel/README.md).
+
 ## نکته‌ی مهم درباره‌ی گیت
 
 **Nexus سرور گیت نیست و `git clone` را پروکسی نمی‌کند.** فقط `raw-github` و
@@ -99,6 +132,9 @@ https://mirror.example.com/repository/raw-ghusercontent/owner/repo/main/README.m
 - اگر IP ثابت نداری: به‌جای allowlist از Basic Auth استفاده کن (در
   `nginx/templates/20-nexus.conf.template` کامنت شده). ولی توجه: داکر برای
   `registry-mirrors` احراز هویت نمی‌فرستد، پس برای مسیر داکر همان IP allowlist لازم است.
+- پنل (`/panel/`) پشت همان allowlist است + لاگین جدا (یوزر/پس ادمین Nexus) —
+  دو لایه. رمز نکسس داخل سشن پنل رمزنگاری‌شده (AES-256-GCM با
+  `PANEL_SESSION_SECRET`) نگه داشته می‌شود، نه plaintext.
 
 ## دو نکته که قبل از تعهد به Nexus باید چک کنی
 
