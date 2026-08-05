@@ -42,6 +42,12 @@ export default async function DiskPage({
           <span className="label">مصرف nexus_data</span>
         </div>
         <div className="card stat">
+          <span className="value">
+            {disk.nginxCacheBytes != null ? formatBytes(disk.nginxCacheBytes) : "—"}
+          </span>
+          <span className="label">کش nginx</span>
+        </div>
+        <div className="card stat">
           <span className="value">{formatBytes(disk.filesystemFreeBytes)}</span>
           <span className="label">فضای آزاد دیسک</span>
         </div>
@@ -50,6 +56,12 @@ export default async function DiskPage({
           <span className="label">حجم کل دیسک</span>
         </div>
       </div>
+
+      <p className="muted">
+        «کش nginx» نسخه‌ی دومی از آرتیفکت‌های داغ است، جدا از nexus_data، و سقف حجمش را
+        <code> MIRROR_CACHE_MAX_SIZE</code> در <code>.env</code> تعیین می‌کند. هرچه از آنجا سرو شود
+        اصلاً به نکسس نمی‌رسد، پس در سقف روزانه‌ی درخواست‌های Community Edition هم شمرده نمی‌شود.
+      </p>
 
       {blobStores && (
         <div className="card">

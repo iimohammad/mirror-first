@@ -1,0 +1,27 @@
+# ---------------------------------------------------------------------------
+# هدرها و تایم‌اوت‌های مشترکِ همه‌ی locationهایی که به نکسس proxy می‌کنند.
+# از داخل هر location با include صدا زده می‌شود.
+#
+# عمداً proxy_buffering اینجا نیست: locationهای کش‌شونده به on نیاز دارند
+# (بدون بافر شدن پاسخ، nginx نمی‌تواند در کش بنویسد) و بقیه به off. هر
+# location خودش تعیینش می‌کند.
+#
+# proxy_pass هم اینجا نیست، چون آدرس upstream بین وی‌هاست‌ها فرق می‌کند
+# (8081 برای نکسس، 5000 برای کانکتور داکر). هر server block در بالای خودش
+# `resolver` و `set $nexus_upstream ...` را دارد.
+#
+# پسوند .inc است (نه .conf) تا nginx با include /etc/nginx/conf.d/*.conf
+# آن را به‌عنوان یک بلاک مستقل نخواند.
+# ---------------------------------------------------------------------------
+
+proxy_set_header Host              $host;
+proxy_set_header X-Real-IP         $remote_addr;
+proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
+
+proxy_http_version 1.1;
+
+# دانلود ایمیج/پکیج بزرگ از upstream کند می‌تواند باشد.
+proxy_connect_timeout 60s;
+proxy_send_timeout    900s;
+proxy_read_timeout    900s;

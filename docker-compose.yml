@@ -57,6 +57,23 @@ services:
       # فقط متغیرهای MIRROR_* جایگزین شوند، وگرنه envsubst
       # متغیرهای خود nginx مثل $host و $remote_addr را هم می‌خورد
       NGINX_ENVSUBST_FILTER: "MIRROR_"
+
+      # ─── کش جلوی نکسس (10-cache.conf + 92-cache.inc) ──────────────────
+      # envsubst ایمیج nginx نحو ${VAR:-default} را نمی‌فهمد، پس پیش‌فرض‌ها
+      # باید همین‌جا با interpolation خود compose ست شوند. اگر متغیری اینجا
+      # تعریف نشود، در تمپلیت لفظی می‌ماند و nginx بالا نمی‌آید.
+      MIRROR_CACHE_MAX_SIZE:   "${MIRROR_CACHE_MAX_SIZE:-20g}"
+      MIRROR_CACHE_INACTIVE:   "${MIRROR_CACHE_INACTIVE:-30d}"
+      MIRROR_CACHE_KEYS_ZONE:  "${MIRROR_CACHE_KEYS_ZONE:-64m}"
+      MIRROR_IMMUTABLE_TTL:    "${MIRROR_IMMUTABLE_TTL:-365d}"
+      MIRROR_NEGATIVE_TTL:     "${MIRROR_NEGATIVE_TTL:-1m}"
+      MIRROR_DOCKER_TAG_TTL:   "${MIRROR_DOCKER_TAG_TTL:-1m}"
+      MIRROR_DOCKER_PING_TTL:  "${MIRROR_DOCKER_PING_TTL:-5m}"
+
+      # ─── سهمیه‌ی هر IP ─────────────────────────────────────────────────
+      MIRROR_RATE_LIMIT:       "${MIRROR_RATE_LIMIT:-100r/s}"
+      MIRROR_RATE_BURST:       "${MIRROR_RATE_BURST:-500}"
+      MIRROR_CONN_LIMIT:       "${MIRROR_CONN_LIMIT:-200}"
     volumes:
       - ./nginx/templates:/etc/nginx/templates:ro
       - ./nginx/acl.conf:/etc/nginx/conf.d/00-acl.conf:ro
@@ -66,6 +83,10 @@ services:
       - ./nginx/docker-entrypoint.d/98-acl-reload.sh:/docker-entrypoint.d/98-acl-reload.sh:ro
       - ./letsencrypt:/etc/letsencrypt:ro
       - ./certbot-www:/var/www/certbot
+      # کش آرتیفکت‌های تغییرناپذیر. عمداً /var/cache/mirror است نه
+      # /var/cache/nginx: دایرکتوری کش را باید خود nginx بسازد تا مالکیتش
+      # به یوزر worker برسد، و مسیرهای موقتِ خود ایمیج هم پوشانده نشوند.
+      - nginx_cache:/var/cache/mirror
     networks: [mirror]
 
   # پنل مدیریت (/panel/) — مدیریت allowlist آی‌پی و پکیج‌ها. پشت همان
@@ -86,12 +107,14 @@ services:
       DATA_DIR: /data
       ACL_CONF_PATH: /shared/acl.conf
       NEXUS_DATA_PATH: /nexus-data
+      NGINX_CACHE_PATH: /nginx-cache/cache
     volumes:
       - panel_data:/data
       # همان فایلی که nginx فقط-خواندنی مانتش کرده؛ پنل رویش می‌نویسد.
       - ./nginx/acl.conf:/shared/acl.conf
       # فقط برای اندازه‌گیری مصرف دیسک (صفحه‌ی /disk) — read-only.
       - nexus_data:/nexus-data:ro
+      - nginx_cache:/nginx-cache:ro
     networks: [mirror]
 
   certbot:
@@ -115,3 +138,6 @@ networks:
 volumes:
   nexus_data:
   panel_data:
+  # کش nginx. جدا از nexus_data است، یعنی نسخه‌ی دومی از آرتیفکت‌های داغ روی
+  # دیسک — موقع اندازه‌گیری فضا حسابش کن (MIRROR_CACHE_MAX_SIZE).
+  nginx_cache:

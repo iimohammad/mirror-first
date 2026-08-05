@@ -9,6 +9,18 @@
 # nginx مثل $host و $remote_addr دست‌نخورده می‌مانند.
 #
 # $mirror_denied در 00-acl.conf (همان nginx/acl.conf) تعریف شده.
+# زون کش و زون‌های سهمیه در 10-cache.conf تعریف شده‌اند.
+#
+# ─── درباره‌ی locationهای زیاد ───────────────────────────────────────────────
+# هر آدرسی که «تغییرناپذیر» باشد (محتوایش تابع محضِ URL است) در nginx کش
+# می‌شود تا درخواست دومش اصلاً به نکسس نرسد — هم بار JVM کم می‌شود، هم زیر
+# سقف ۱۰۰٬۰۰۰ درخواست در روزِ Community Edition می‌مانی. متادیتاها (ایندکس
+# apt، صفحه‌ی simple پایتون، packument نpm، @v/list گو، محتوای شاخه‌ی گیت‌هاب)
+# عمداً کش نمی‌شوند، چون زیر همان آدرس عوض می‌شوند.
+#
+# ترتیب locationهای regex مهم است: nginx به ترتیبِ نوشته‌شدن چک می‌کند و
+# اولین تطابق برنده است. پس همه‌ی استثناهای «کش نکن» قبل از قاعده‌ی کلیِ
+# پسوندها می‌آیند.
 # ---------------------------------------------------------------------------
 
 # ---------- HTTP: فقط ACME و ریدایرکت ----------
@@ -42,55 +54,116 @@ server {
     # auth_basic           "mirror";
     # auth_basic_user_file /etc/nginx/conf.d/htpasswd;
 
+    # لاگ با ستون cache=HIT/MISS/... — برای اندازه‌گیری hit ratio لازم است.
+    access_log /var/log/nginx/access.log mirror;
+
+    # سهمیه‌ی هر IP. جلوی یک کلاینتِ گیرکرده در حلقه‌ی retry را می‌گیرد تا
+    # سهمیه‌ی روزانه‌ی مشترک را نسوزاند. اعداد در .env قابل تنظیم‌اند.
+    limit_req  zone=mirror_rate burst=${MIRROR_RATE_BURST} nodelay;
+    limit_conn mirror_conns ${MIRROR_CONN_LIMIT};
+
     # آپلود پکیج (twine / npm publish / curl --upload-file) سقف حجم ندارد.
-    # همین به location /panel/ هم ارث می‌رسد (آپلود از پنل هم لازمش دارد).
+    # همین به location /panel هم ارث می‌رسد (آپلود از پنل هم لازمش دارد).
     client_max_body_size 0;
+
+    # proxy_pass با هاست‌نیم لفظی فقط یک‌بار، در لحظه‌ی بالا آمدن/reload
+    # نگین‌اکس، resolve می‌شود. اگر همان لحظه nexus بالا نباشد، کل nginx
+    # (و مسیر ACME روی پورت ۸۰) با «host not found in upstream» بالا
+    # نمی‌آید؛ و بعداً هم آی‌پی را برای همیشه کش می‌کند و با recreate شدن
+    # کانتینر nexus (مثلاً موقع آپگرید) ۵۰۲ دائمی می‌دهد. با resolver +
+    # متغیر، resolve هر بار در زمان درخواست انجام می‌شود. اینجا در سطح
+    # server تعریف شده تا همه‌ی locationها از آن استفاده کنند.
+    resolver 127.0.0.11 valid=10s;
+    set $nexus_upstream nexus:8081;
+    set $panel_upstream panel:3000;
 
     # پنل مدیریت (IP allowlist + پکیج‌ها). عمداً بدون / آخر: Next.js با
     # basePath="/panel" ریشه‌ی اپ را به‌جای «/panel/» با «/panel» (بدون
     # اسلش) canonical می‌کند؛ اگر پترن اینجا «/panel/» بود، درخواست به
     # «/panel» با آن مچ نمی‌شد و می‌افتاد روی location / (یعنی نکسس) —
     # نتیجه‌اش یک ریدایرکت loop بی‌نهایت بین پنل و نکسس بود. این پترن هم
-    # «/panel» و هم هر چیزی زیر «/panel/...» را می‌گیرد. prefix طولانی‌تر
-    # از location / است، پس بدون توجه به ترتیب همیشه همین اول چک می‌شود.
+    # «/panel» و هم هر چیزی زیر «/panel/...» را می‌گیرد.
+    #
+    # ^~ یعنی اگر این prefix برنده شد، دیگر سراغ locationهای regex نرو —
+    # هیچ‌کدام از قواعد کش نباید به دارایی‌های استاتیک پنل دست بزنند.
     # auth پنل جدا از همین allowlist است (لاگین با یوزر/پس ادمین Nexus).
-    location /panel {
-        resolver 127.0.0.11 valid=10s;
-        set $panel_upstream panel:3000;
+    location ^~ /panel {
         proxy_pass http://$panel_upstream;
-
-        proxy_set_header Host              $host;
-        proxy_set_header X-Real-IP         $remote_addr;
-        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        proxy_http_version 1.1;
-        proxy_buffering    off;
+        include /etc/nginx/conf.d/91-proxy.inc;
+        proxy_buffering off;
     }
 
-    location / {
-        # proxy_pass با هاست‌نیم لفظی فقط یک‌بار، در لحظه‌ی بالا آمدن/reload
-        # نگین‌اکس، resolve می‌شود. اگر همان لحظه nexus بالا نباشد، کل nginx
-        # (و مسیر ACME روی پورت ۸۰) با «host not found in upstream» بالا
-        # نمی‌آید؛ و بعداً هم آی‌پی را برای همیشه کش می‌کند و با recreate شدن
-        # کانتینر nexus (مثلاً موقع آپگرید) ۵۰۲ دائمی می‌دهد. با resolver +
-        # متغیر، resolve هر بار در زمان درخواست انجام می‌شود.
-        resolver 127.0.0.11 valid=10s;
-        set $nexus_upstream nexus:8081;
+    # --- apt: ایندکس‌های by-hash ------------------------------------------
+    # مسیرشان خودِ هشِ محتواست، پس تغییرناپذیرند. اوبونتو/دبیان به‌صورت
+    # پیش‌فرض همین‌ها را می‌گیرند، و `apt update` روی چند سرور دقیقاً همین
+    # فایل‌ها را تکرار می‌کند.
+    location ~ /dists/.+/by-hash/ {
         proxy_pass http://$nexus_upstream;
+        include /etc/nginx/conf.d/91-proxy.inc;
+        include /etc/nginx/conf.d/92-cache.inc;
+        proxy_cache_valid 200 ${MIRROR_IMMUTABLE_TTL};
+    }
 
-        proxy_set_header Host              $host;
-        proxy_set_header X-Real-IP         $remote_addr;
-        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+    # --- apt: بقیه‌ی dists ------------------------------------------------
+    # InRelease / Release / Packages: کش نمی‌کنیم. اگر Release کش‌شده با
+    # Packages تازه نخواند، apt با «Hash Sum mismatch» می‌ترکد.
+    location ~ /dists/ {
+        proxy_pass http://$nexus_upstream;
+        include /etc/nginx/conf.d/91-proxy.inc;
+        proxy_buffering off;
+    }
 
-        proxy_http_version 1.1;
-        proxy_buffering    off;
+    # --- go: فهرست نسخه‌ها و @latest --------------------------------------
+    # با انتشار هر نسخه‌ی جدید عوض می‌شوند.
+    location ~ (/@v/list|/@latest)$ {
+        proxy_pass http://$nexus_upstream;
+        include /etc/nginx/conf.d/91-proxy.inc;
+        proxy_buffering off;
+    }
 
-        # دانلود ایمیج/پکیج بزرگ از upstream کند می‌تواند باشد.
-        proxy_connect_timeout 60s;
-        proxy_send_timeout    900s;
-        proxy_read_timeout    900s;
+    # --- go: یک نسخه‌ی مشخص ------------------------------------------------
+    # .info / .mod / .zip یک نسخه‌ی منتشرشده هرگز عوض نمی‌شوند (خود go با
+    # GOSUMDB همین را تضمین می‌کند).
+    location ~ /@v/[^/]+\.(info|mod|zip)$ {
+        proxy_pass http://$nexus_upstream;
+        include /etc/nginx/conf.d/91-proxy.inc;
+        include /etc/nginx/conf.d/92-cache.inc;
+        proxy_cache_valid 200 ${MIRROR_IMMUTABLE_TTL};
+    }
+
+    # --- pypi: صفحه‌ی simple ----------------------------------------------
+    # فهرست فایل‌های یک پکیج است؛ با هر انتشار جدید عوض می‌شود.
+    location ~ ^/repository/[^/]+/simple/ {
+        proxy_pass http://$nexus_upstream;
+        include /etc/nginx/conf.d/91-proxy.inc;
+        proxy_buffering off;
+    }
+
+    # --- گیت‌هاب: محتوای شاخه ---------------------------------------------
+    # raw.githubusercontent.com و آرشیو یک شاخه (archive/refs/heads/x.tar.gz)
+    # زیر همان آدرس عوض می‌شوند — برخلاف فایل‌های ریلیز که تغییرناپذیرند.
+    location ~ ^/repository/raw-ghusercontent/|/archive/refs/heads/ {
+        proxy_pass http://$nexus_upstream;
+        include /etc/nginx/conf.d/91-proxy.inc;
+        proxy_buffering off;
+    }
+
+    # --- آرشیوها و پکیج‌های نسخه‌دار ---------------------------------------
+    # wheel، sdist، tarball نpm، .deb، .rpm، jar، crate، فایل ریلیز گیت‌هاب…
+    # همه زیر آدرس نسخه‌دار می‌آیند و بازنویسی نمی‌شوند (خود نکسس هم اجازه‌ی
+    # بازنویسی نسخه را نمی‌دهد — PACKAGES.md).
+    location ~* ^/repository/.+\.(whl|egg|tar|tgz|txz|tbz2|gz|bz2|xz|zst|zip|7z|deb|udeb|ddeb|rpm|apk|jar|war|ear|aar|pom|module|gem|crate|nupkg|exe|msi|dmg|pkg|asc|sig|sha256|sha512)$ {
+        proxy_pass http://$nexus_upstream;
+        include /etc/nginx/conf.d/91-proxy.inc;
+        include /etc/nginx/conf.d/92-cache.inc;
+        proxy_cache_valid 200 ${MIRROR_IMMUTABLE_TTL};
+    }
+
+    # --- بقیه: UI، REST API، متادیتای npm و هر چیز دیگر --------------------
+    location / {
+        proxy_pass http://$nexus_upstream;
+        include /etc/nginx/conf.d/91-proxy.inc;
+        proxy_buffering off;
     }
 }
 
@@ -106,25 +179,62 @@ server {
     #    پس روی این هاست فقط IP allowlist کار می‌کند.
     if ($mirror_denied) { return 403; }
 
+    access_log /var/log/nginx/access.log mirror;
+
+    limit_req  zone=mirror_rate burst=${MIRROR_RATE_BURST} nodelay;
+    limit_conn mirror_conns ${MIRROR_CONN_LIMIT};
+
     client_max_body_size 0;
     chunked_transfer_encoding on;
 
-    location / {
-        resolver 127.0.0.11 valid=10s;
-        set $nexus_upstream nexus:5000;
+    resolver 127.0.0.11 valid=10s;
+    set $nexus_upstream nexus:5000;
+
+    # --- ping ---------------------------------------------------------------
+    # داکر قبل از هر pull یک بار /v2/ را می‌زند. پاسخش عملاً ثابت است ولی
+    # در سهمیه‌ی روزانه شمرده می‌شود؛ کش کوتاه‌مدتش یک درخواست به ازای هر
+    # pull صرفه‌جویی می‌کند.
+    location = /v2/ {
         proxy_pass http://$nexus_upstream;
+        include /etc/nginx/conf.d/91-proxy.inc;
+        include /etc/nginx/conf.d/92-cache.inc;
+        proxy_cache_valid 200 ${MIRROR_DOCKER_PING_TTL};
+    }
 
-        proxy_set_header Host              $host;
-        proxy_set_header X-Real-IP         $remote_addr;
-        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+    # --- لایه‌ها ------------------------------------------------------------
+    # آدرسشان خودِ هشِ محتواست. تغییرناپذیرترین چیزِ ممکن، و بیشترِ حجم و
+    # بیشترِ تعداد درخواست‌های یک pull هم همین‌هاست.
+    location ~ ^/v2/.+/blobs/[a-z0-9]+:[A-Fa-f0-9]+$ {
+        proxy_pass http://$nexus_upstream;
+        include /etc/nginx/conf.d/91-proxy.inc;
+        include /etc/nginx/conf.d/92-cache.inc;
+        proxy_cache_valid 200 ${MIRROR_IMMUTABLE_TTL};
+    }
 
-        proxy_http_version     1.1;
-        proxy_buffering        off;
+    # --- manifest با digest -------------------------------------------------
+    location ~ ^/v2/.+/manifests/[a-z0-9]+:[A-Fa-f0-9]+$ {
+        proxy_pass http://$nexus_upstream;
+        include /etc/nginx/conf.d/91-proxy.inc;
+        include /etc/nginx/conf.d/92-cache.inc;
+        proxy_cache_valid 200 ${MIRROR_IMMUTABLE_TTL};
+    }
+
+    # --- manifest با تگ -----------------------------------------------------
+    # تگ جابه‌جا می‌شود (`latest` که مثال بارزش است)، پس TTL کوتاه. حتی چند
+    # دقیقه، در یک بیلد موازی ده‌ها درخواست را حذف می‌کند. اگر می‌خواهی
+    # کاملاً تازه باشد، MIRROR_DOCKER_TAG_TTL را در .env بگذار 1s.
+    location ~ ^/v2/.+/manifests/ {
+        proxy_pass http://$nexus_upstream;
+        include /etc/nginx/conf.d/91-proxy.inc;
+        include /etc/nginx/conf.d/92-cache.inc;
+        proxy_cache_valid 200 ${MIRROR_DOCKER_TAG_TTL};
+    }
+
+    # --- بقیه: tags/list، catalog، مسیرهای آپلود ---------------------------
+    location / {
+        proxy_pass http://$nexus_upstream;
+        include /etc/nginx/conf.d/91-proxy.inc;
+        proxy_buffering         off;
         proxy_request_buffering off;
-
-        proxy_connect_timeout 60s;
-        proxy_send_timeout    900s;
-        proxy_read_timeout    900s;
     }
 }
