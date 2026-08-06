@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  shellcheck:
+    name: shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: Lint every shell script
+        # SC1091 only: the scripts source ./.env, which by design does not
+        # exist in a checkout. Everything else must be clean at warning+.
+        run: |
+          mapfile -t SCRIPTS < <(
+            find . -name '*.sh' -not -path './.git/*' -not -path './panel/node_modules/*' | sort
+          )
+          printf 'linting %d scripts\n' "${#SCRIPTS[@]}"
+          shellcheck -x --severity=warning -e SC1091 "${SCRIPTS[@]}"
+
+  hosts-scripts:
+    name: /etc/hosts scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # These edit a temporary file, never the runner's real /etc/hosts, but
+      # the scripts under test refuse to run as non-root.
+      - run: sudo bash tests/test-hosts.sh
+
+  nginx-config:
+    name: nginx config and allowlist behaviour
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Docker is preinstalled on ubuntu-latest; the test pulls nginx and curl
+      # images itself and publishes no ports.
+      - run: bash tests/test-nginx-config.sh
+
+  panel:
+    name: panel typecheck and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: panel
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: panel/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm run build
