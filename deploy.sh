@@ -39,6 +39,18 @@ if [[ ! -f .env ]]; then
   sed -i "s/^MIRROR_DOMAIN=.*/MIRROR_DOMAIN=$MIRROR_DOMAIN_INPUT/" .env
   sed -i "s/^LETSENCRYPT_EMAIL=.*/LETSENCRYPT_EMAIL=$LETSENCRYPT_EMAIL_INPUT/" .env
   sed -i "s/^PANEL_SESSION_SECRET=.*/PANEL_SESSION_SECRET=$(openssl rand -hex 32)/" .env
+
+  echo
+  echo "  پروکسی SNI را هم بالا بیاورم؟ (برای git clone و دانلود از گیت‌هاب —"
+  echo "  کاری که میرور نمی‌تواند بکند). صاحب پورت ۴۴۳ می‌شود و nginx میرور"
+  echo "  پشتش می‌رود؛ ACME روی پورت ۸۰ دست‌نخورده می‌ماند."
+  read -rp "  [y/N] " SNI_ANS
+  if [[ "$SNI_ANS" == [yY] ]]; then
+    # هر دو با هم لازم‌اند: یکی سرویس را روشن می‌کند، دیگری میرور را از
+    # پورت ۴۴۳ کنار می‌برد. تنها یکی‌شان یعنی تعارض پورت موقع up.
+    printf '\nCOMPOSE_PROFILES=sni\nMIRROR_HTTPS_BIND=127.0.0.1:8443\n' >> .env
+    echo "  ✔ روشن شد."
+  fi
   echo "  .env ساخته شد. برای اکانت داکرهاب یا تنظیمات اضافه: nano .env"
 else
   say ".env از قبل هست"
@@ -104,6 +116,13 @@ cat <<EOF
   میرور:  https://$MIRROR_DOMAIN/
   داکر:   https://docker.$MIRROR_DOMAIN/
   پنل:    https://$MIRROR_DOMAIN/panel/   (لاگین با یوزر/پس ادمین نکسس بالا)
+EOF
+if [[ "${COMPOSE_PROFILES:-}" == *sni* ]]; then
+  cat <<EOF
+  پروکسی SNI: روی همین سرور، پورت ۴۴۳ (برای git clone و گیت‌هاب)
+EOF
+fi
+cat <<EOF
 
 قدم‌های بعدی:
   1. اگر IP اضافه نکردی: از پنل (/panel/ips) یا دستی nginx/acl.conf
@@ -111,7 +130,9 @@ cat <<EOF
        docker compose exec nexus rm -f /nexus-data/admin.password
   3. در نکسس: Administration → System → Capabilities → Base URL = https://$MIRROR_DOMAIN/
   4. در نکسس یا پنل (/panel/disk): Cleanup Policy بساز وگرنه دیسک پر می‌شود
-  5. وصل کردن سرورهای ایران:
+  5. روی هر سرور ایران (میرور + پروکسی SNI با یک دستور):
+       sudo MIRROR_DOMAIN=$MIRROR_DOMAIN DISABLE_DEFAULT_SOURCES=1 ./client/setup-all.sh
+     فقط میرور، بدون دست زدن به /etc/hosts:
        sudo MIRROR_DOMAIN=$MIRROR_DOMAIN ./client/setup-client.sh all
 
 جزئیات کامل: DEPLOY.md
