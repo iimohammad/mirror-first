@@ -12,10 +12,29 @@
 #   SNI = دامنه‌های میرور        → کانتینر nginx خود میرور (شبکه‌ی داکر)
 #   SNI = هر چیز دیگر           → همان هاست روی ۴۴۳ در اینترنت
 #
-# ⚠️ خط مربوط به دامنه‌های میرور حیاتی است. بدون آن، SNI برابر
-#    mirror.<domain> به DNS عمومی می‌رود، به IP همین سرور می‌رسد، و پروکسی
-#    به خودش وصل می‌شود — یک درخواست کل worker_connections را می‌خورد و
-#    پروکسی برای همه‌ی کلاینت‌ها می‌خوابد (تست‌شده).
+# ─── چرا دو server و چرا PROXY protocol ────────────────────────────────────
+# یک پروکسی لایه‌۴ مسیر را نمی‌بیند، فقط نام دامنه را. پس اینجا نمی‌شود گفت
+# «/panel باز، /repository بسته» — هر دو زیر یک SNI هستند. اگر allowlist را
+# همین‌جا اعمال کنیم، یا هر دو باز می‌شوند یا هر دو بسته.
+#
+# راه‌حل: تصمیم دسترسی را به جایی می‌بریم که مسیر دیده می‌شود (nginx میرور)،
+# و برای اینکه آنجا IP واقعی کلاینت را داشته باشد، PROXY protocol می‌فرستیم.
+# ولی PROXY protocol را نمی‌شود فقط برای بعضی مقصدها روشن کرد (nginx فقط
+# on/off ثابت قبول می‌کند)، و هاست‌های اینترنتی این پروتکل را نمی‌فهمند.
+#
+# پس زنجیره این شکلی است:
+#
+#   کلاینت ──TLS──▶ server A (443، proxy_protocol on)
+#                     ├─ SNI میرور    ─▶ nginx:443  (خودش proxy_protocol می‌خواند
+#                     │                   → IP واقعی → /panel باز، مخازن بسته)
+#                     └─ بقیه         ─▶ server B (127.0.0.1:8444)
+#                                          هدر PROXY را باز می‌کند، IP واقعی را
+#                                          می‌بیند، allowlist را اعمال می‌کند و
+#                                          کانکشن تمیز را به اینترنت می‌فرستد.
+#
+# ⚠️ خط مربوط به دامنه‌های میرور حیاتی است. بدون آن، SNI برابر mirror.<domain>
+#    به DNS عمومی می‌رود، به IP همین سرور می‌رسد، و پروکسی به خودش وصل می‌شود —
+#    یک درخواست کل worker_connections را می‌خورد و پروکسی برای همه می‌خوابد.
 # ---------------------------------------------------------------------------
 worker_processes auto;
 error_log /var/log/nginx/error.log warn;
@@ -33,12 +52,17 @@ stream {
     resolver         127.0.0.11 ipv6=off valid=30s;
     resolver_timeout 5s;
 
-    map $ssl_preread_server_name $https_destination {
+    map $ssl_preread_server_name $sni_destination {
         ""                       127.0.0.1:9;   # بدون SNI → جایی که کسی گوش نمی‌دهد
         ${MIRROR_DOMAIN}         nginx:443;
         docker.${MIRROR_DOMAIN}  nginx:443;
         push.${MIRROR_DOMAIN}    nginx:443;
-        default                  $ssl_preread_server_name:443;
+        default                  127.0.0.1:8444;
+    }
+
+    map $ssl_preread_server_name $passthrough_destination {
+        ""      127.0.0.1:9;
+        default $ssl_preread_server_name:443;
     }
 
     log_format sni_https
@@ -47,20 +71,42 @@ stream {
         'status=$status sent=$bytes_sent received=$bytes_received '
         'time=$session_time';
 
+    # --- server A: ورودی عمومی -------------------------------------------
+    # عمداً هیچ allow/deny اینجا نیست. دسترسی per-destination تصمیم گرفته
+    # می‌شود: مخازن و پنل را nginx میرور جدا می‌کند، passthrough را server B.
     server {
         listen 0.0.0.0:443 reuseport;
 
+        ssl_preread on;
+        proxy_protocol on;
+
+        proxy_connect_timeout 15s;
+        proxy_timeout         30m;
+        proxy_pass            $sni_destination;
+
+        access_log /var/log/nginx/sni-access.log sni_https;
+        error_log  /var/log/nginx/sni-error.log warn;
+    }
+
+    # --- server B: passthrough به اینترنت ---------------------------------
+    server {
+        listen 127.0.0.1:8444 proxy_protocol;
+
+        # هدر PROXY را که server A فرستاده می‌خواند، پس $remote_addr از این
+        # به بعد IP واقعی کلاینت است، نه 127.0.0.1.
+        set_real_ip_from 127.0.0.1;
+
         # لیست کلاینت‌های مجاز؛ پنل (/panel/ips) می‌سازدش. پیش‌فرض «همه
-        # ممنوع» است — بدون IP هیچ‌کس رد نمی‌شود، نه میرور نه passthrough.
+        # ممنوع» است. این فقط passthrough را می‌بندد — پنل و مخازن را
+        # nginx میرور جدا کنترل می‌کند.
         include /etc/nginx/sni-allow.conf;
 
         ssl_preread on;
 
         proxy_connect_timeout 15s;
         proxy_timeout         30m;
-        proxy_pass            $https_destination;
+        proxy_pass            $passthrough_destination;
 
         access_log /var/log/nginx/sni-access.log sni_https;
-        error_log  /var/log/nginx/sni-error.log warn;
     }
 }

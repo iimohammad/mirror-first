@@ -46,9 +46,10 @@ if [[ ! -f .env ]]; then
   echo "  پشتش می‌رود؛ ACME روی پورت ۸۰ دست‌نخورده می‌ماند."
   read -rp "  [y/N] " SNI_ANS
   if [[ "$SNI_ANS" == [yY] ]]; then
-    # هر دو با هم لازم‌اند: یکی سرویس را روشن می‌کند، دیگری میرور را از
-    # پورت ۴۴۳ کنار می‌برد. تنها یکی‌شان یعنی تعارض پورت موقع up.
-    printf '\nCOMPOSE_PROFILES=sni\nMIRROR_HTTPS_BIND=127.0.0.1:8443\n' >> .env
+    # هر سه با هم: پروفایل سرویس را روشن می‌کند، MIRROR_SNI به nginx میرور
+    # می‌گوید PROXY protocol بخواند (وگرنه allowlist بی‌اثر می‌شود)، و bind
+    # میرور را از ۴۴۳ کنار می‌برد. یکی‌شان بدون بقیه یعنی خرابی.
+    printf '\nCOMPOSE_PROFILES=sni\nMIRROR_SNI=1\nMIRROR_HTTPS_BIND=127.0.0.1:8443\n' >> .env
     echo "  ✔ روشن شد."
   fi
   echo "  .env ساخته شد. برای اکانت داکرهاب یا تنظیمات اضافه: nano .env"

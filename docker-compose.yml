@@ -86,6 +86,13 @@ services:
       MIRROR_PANEL_OPEN:       "${MIRROR_PANEL_OPEN:-0}"
       MIRROR_PANEL_LOGIN_RATE: "${MIRROR_PANEL_LOGIN_RATE:-20r/m}"
       MIRROR_PANEL_LOGIN_BURST: "${MIRROR_PANEL_LOGIN_BURST:-10}"
+
+      # ─── وقتی پشت پروکسی SNI هستیم ─────────────────────────────────────
+      # هر دو از یک متغیر (MIRROR_SNI) مشتق می‌شوند تا نشود یکی را ست کرد و
+      # دیگری را نه. بدون این‌ها، ترافیکی که از sniproxy می‌آید $remote_addr
+      # اش خودِ پروکسی است و acl.conf عملاً هیچ‌کس را فیلتر نمی‌کند.
+      MIRROR_LISTEN_EXTRA: "${MIRROR_SNI:+proxy_protocol}"
+      MIRROR_REALIP: "${MIRROR_SNI:+set_real_ip_from 172.16.0.0/12; real_ip_header proxy_protocol;}"
     volumes:
       - ./nginx/templates:/etc/nginx/templates:ro
       - ./nginx/acl.conf:/etc/nginx/conf.d/00-acl.conf:ro
