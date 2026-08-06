@@ -1,6 +1,12 @@
 # One exact hostname per line.
 # /etc/hosts does not support wildcard entries.
 
+# ⚠️ github.com اینجا فقط ریموت‌های HTTPS را درست می‌کند.
+#    اگر ریموتت git@github.com: است، گیت از SSH روی پورت ۲۲ می‌رود و پروکسی
+#    فقط روی ۴۴۳ گوش می‌دهد — نتیجه‌اش هنگ کردن git pull است، نه رد شدن.
+#    یا ریموت را HTTPS کن:
+#      git remote set-url origin https://github.com/OWNER/REPO.git
+#    یا این خط را از فهرست بردار و بگذار SSH مستقیم برود.
 github.com
 api.github.com
 raw.githubusercontent.com
@@ -18,3 +24,14 @@ files.pythonhosted.org
 proxy.golang.org
 sum.golang.org
 storage.googleapis.com
+
+# APIهای مدل‌های زبانی. این‌ها را میرور نمی‌تواند کش کند (هر درخواست یکتاست)،
+# پس فقط از مسیر passthrough پروکسی SNI رد می‌شوند.
+#
+# ⚠️ اگر برنامه‌ای که این APIها را صدا می‌زند داخل داکر است، این فایل کافی نیست:
+#    کانتینر /etc/hosts هاست را نمی‌بیند. باید در سرویسِ خودش هم بنویسی:
+#      extra_hosts:
+#        - "openrouter.ai:<PROXY_IP>"
+openrouter.ai
+api.openai.com
+api.anthropic.com
