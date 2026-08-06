@@ -115,8 +115,20 @@ openssl rand -hex 32   # PANEL_SESSION_SECRET
 
 ## نکته‌ی مهم درباره‌ی گیت
 
-**Nexus سرور گیت نیست و `git clone` را پروکسی نمی‌کند.** فقط `raw-github` و
-`raw-ghusercontent` هستند که دانلود *فایل* و *ریلیز* از گیت‌هاب را کش می‌کنند:
+**Nexus سرور گیت نیست و `git clone` را پروکسی نمی‌کند.**
+
+ساده‌ترین راه حلش سرویس اختیاری `sniproxy` در همین استک است — یک passthrough
+بر پایه‌ی SNI که TLS را باز نمی‌کند. دو خط در `.env`:
+
+```bash
+COMPOSE_PROFILES=sni
+MIRROR_HTTPS_BIND=127.0.0.1:8443
+```
+
+و `docker compose up -d`. جزئیات و هشدارهایش در [DEPLOY.md](DEPLOY.md) بخش ۴.۵.
+
+بدون آن، فقط `raw-github` و `raw-ghusercontent` هستند که دانلود *فایل* و
+*ریلیز* از گیت‌هاب را کش می‌کنند:
 
 ```
 https://mirror.example.com/repository/raw-github/owner/repo/releases/download/v1.0/x.tar.gz

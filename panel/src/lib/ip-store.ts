@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { ACL_CONF_PATH, DATA_DIR } from "./config";
+import { ACL_CONF_PATH, DATA_DIR, SNI_ALLOW_PATH } from "./config";
 import { readJson, updateJson } from "./json-store";
 
 export interface AllowedIp {
@@ -56,13 +56,13 @@ export async function addIp(cidrInput: string, labelInput: string): Promise<Allo
     }
     return [...cur, { id: randomUUID(), cidr, label, createdAt: new Date().toISOString() }];
   });
-  await writeAclConf(list);
+  await writeAllowlists(list);
   return list;
 }
 
 export async function removeIp(id: string): Promise<AllowedIp[]> {
   const list = await updateJson<AllowedIp[]>(IPS_FILE, [], (cur) => cur.filter((x) => x.id !== id));
-  await writeAclConf(list);
+  await writeAllowlists(list);
   return list;
 }
 
@@ -109,4 +109,40 @@ async function writeAclConf(list: AllowedIp[]): Promise<void> {
   // جداگانه‌ی nginx روی همان مسیر آن را نمی‌بیند. writeFile ساده روی همان
   // inode موجود truncate+write می‌کند، که هر دو مشکل را کنار می‌زند.
   await fs.writeFile(ACL_CONF_PATH, content, "utf8");
+}
+
+const SNI_HEADER = `# ---------------------------------------------------------------------------
+# کلاینت‌های مجاز پروکسی SNI (سرویس sniproxy، پورت ۴۴۳).
+#
+# ⚠️  این فایل را پنل مدیریت می‌کند (/panel/ips). ویرایش دستی‌اش دفعه‌ی بعد که
+#     کسی از پنل IP اضافه یا حذف کند از دست می‌رود.
+#
+# ⚠️  پیش‌فرض «همه ممنوع» است (fail closed). این تنها دروازه‌ی واقعی است:
+#     چون پروکسی TLS را باز نمی‌کند، هر کلاینتی که اینجا مجاز باشد می‌تواند
+#     هر هاستی را که خود سرور می‌بیند صدا بزند. مجازها را قابل‌اعتماد بدان.
+# ---------------------------------------------------------------------------
+`;
+
+// همان لیست، در گویش ngx_stream_access. بلاک geo اینجا کار نمی‌کند چون
+// در کانتکست stream است، نه http.
+async function writeSniAllowConf(list: AllowedIp[]): Promise<void> {
+  const body =
+    list.length > 0
+      ? list.map((x) => `allow ${x.cidr};   # ${x.label}`).join("\n") + "\n"
+      : "# ⬇️ از پنل (/panel/ips) اضافه کن\n";
+
+  // deny all همیشه آخر است: nginx اولین قانون منطبق را می‌گیرد، پس اگر بالا
+  // بیاید همه‌ی allow های بعدی بی‌اثر می‌شوند.
+  await fs.writeFile(SNI_ALLOW_PATH, SNI_HEADER + "\n" + body + "\ndeny all;\n", "utf8");
+}
+
+async function writeAllowlists(list: AllowedIp[]): Promise<void> {
+  await writeAclConf(list);
+  // اگر sniproxy روشن نباشد فایلش mount نشده و مسیر وجود ندارد؛ آن‌وقت
+  // نبودنش نباید افزودن IP را در پنل بشکند.
+  try {
+    await writeSniAllowConf(list);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+  }
 }
