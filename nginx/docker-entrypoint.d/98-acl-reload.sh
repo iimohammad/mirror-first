@@ -7,8 +7,11 @@
 #
 # md5sum از busybox coreutils می‌آید و توی nginx:alpine از قبل هست — نیازی
 # به نصب inotify-tools نیست.
+#
+# همین اسکریپت در سرویس sniproxy هم استفاده می‌شود؛ آنجا فایلی که باید پاییده
+# شود allowlist خود پروکسی است، پس مسیر از ACL_WATCH_FILE می‌آید.
 # ---------------------------------------------------------------------------
-ACL_FILE=/etc/nginx/conf.d/00-acl.conf
+ACL_FILE="${ACL_WATCH_FILE:-/etc/nginx/conf.d/00-acl.conf}"
 
 ( last=""
   while :; do

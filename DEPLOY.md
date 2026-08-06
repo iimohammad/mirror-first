@@ -17,6 +17,8 @@ client/setup-client.sh        وصل کردن کلاینت‌ها               
 nginx/acl.conf                allowlist آی‌پی — اولین بار دستی، بعد از پنل
 nginx/templates/              کانفیگ nginx (envsubst روی ${MIRROR_*}) — شامل لایه‌ی کش
 nginx/optional/               کانکتور push داکر، پیش‌فرض غیرفعال
+nginx/sni-templates/          کانفیگ پروکسی SNI (اختیاری، پروفایل sni)
+nginx/sni-allow.conf          allowlist پروکسی SNI — پنل می‌سازدش
 panel/                        اپ مدیریت IP/پکیج‌ها روی /panel/    (خودش build می‌شود)
 ```
 
@@ -176,6 +178,76 @@ docker pull docker.mirror.example.com/astral-sh/uv:latest   # ✅
 
 روی k8s این مشکل نیست؛ `hosts.toml` کانتینردی per-registry mirror را درست
 پشتیبانی می‌کند.
+
+### انتقال اسکریپت به سرور ایران
+
+اسکریپت را **paste نکن** — متن چندخطی با کامنت فارسی داخل ترمینال به هم
+می‌ریزد و نصفه اجرا می‌شود. فایل را منتقل کن:
+
+```bash
+# از سرور خارج:
+scp client/setup-client.sh user@IRAN_SERVER:/tmp/
+```
+
+یا از خود میرور بگیرش (اگر IP آن سرور در allowlist هست) — همان `raw-ghusercontent`:
+
+```bash
+curl -fsSL -o /tmp/setup-client.sh \
+  https://mirror.example.com/repository/raw-ghusercontent/OWNER/REPO/main/client/setup-client.sh
+head -1 /tmp/setup-client.sh     # باید #!/usr/bin/env bash باشد
+```
+
+---
+
+## ۴.۵. پروکسی SNI (اختیاری) — برای git clone و هر HTTPS دیگر
+
+میرور فقط پکیج را کش می‌کند؛ `git clone` را پروکسی نمی‌کند (Nexus سرور گیت
+نیست). سرویس `sniproxy` این سوراخ را می‌بندد: یک passthrough بر پایه‌ی SNI که
+TLS را باز نمی‌کند و فقط بر اساس نام میزبانِ داخل ClientHello، کانکشن را به
+همان مقصد forward می‌کند.
+
+**روشن کردنش** — هر دو خط در `.env`، چون پروکسی صاحب ۴۴۳ می‌شود و nginx
+میرور باید از آن پورت کنار برود:
+
+```bash
+COMPOSE_PROFILES=sni
+MIRROR_HTTPS_BIND=127.0.0.1:8443
+```
+
+سپس:
+
+```bash
+docker compose up -d
+```
+
+همین. حالا `docker compose ps` پنج سرویس نشان می‌دهد و پورت ۴۴۳ دست
+`sniproxy` است. دامنه‌های میرور (`mirror.`، `docker.`، `push.`) داخل شبکه‌ی
+داکر به nginx میرور می‌روند و بقیه به اینترنت. پورت ۸۰ دست‌نخورده پیش میرور
+می‌ماند، پس تمدید گواهی ACME عوض نمی‌شود.
+
+**allowlist** همان `/panel/ips` است — پنل حالا هر دو فایل را با هم می‌نویسد
+(`nginx/acl.conf` برای میرور، `nginx/sni-allow.conf` برای پروکسی) و هر دو
+nginx ظرف ۵ ثانیه reload می‌شوند.
+
+⚠️ **این نکته را جدی بگیر:** وقتی پروکسی SNI روشن است، ترافیک میرور از داخل
+شبکه‌ی داکر می‌آید، پس `$remote_addr` دیگر IP واقعی کلاینت نیست و allowlist
+سمت میرور عملاً چیزی را فیلتر نمی‌کند. تنها دروازه‌ی واقعی، `sni-allow.conf`
+است. تلاش برای حفظ IP واقعی با PROXY protocol جواب نمی‌دهد، چون nginx
+`proxy_protocol` را فقط ثابت (`on`/`off`) قبول می‌کند و روشن کردنش برای همه،
+passthrough به هاست‌های بیرونی را می‌شکند.
+
+**روی سرور ایران**، دامنه‌هایی را که می‌خواهی از پروکسی رد شوند در
+`/etc/hosts` به IP سرور خارج اشاره بده — با اسکریپت‌های خود
+[sni-https-proxy](https://github.com/iimohammad/sni-https-proxy):
+
+```bash
+sudo bash client-server/set-hosts.sh --proxy-ip SERVER_IP \
+  github.com api.github.com raw.githubusercontent.com objects.githubusercontent.com
+```
+
+⚠️ دامنه‌های خود میرور را هرگز در این لیست نگذار.
+
+برای apt/pip/npm/docker از میرور استفاده کن، نه پروکسی — کش میرور سریع‌تر است.
 
 ---
 
