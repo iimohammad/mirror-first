@@ -39,8 +39,9 @@ server {
 
 # ---------- Nexus: UI و همه‌ی فرمت‌ها (pypi / npm / go / apt / raw) ----------
 server {
-    listen      443 ssl;
+    listen      443 ssl ${MIRROR_LISTEN_EXTRA};
     http2 on;
+    ${MIRROR_REALIP}
     server_name ${MIRROR_DOMAIN};
 
     include /etc/nginx/conf.d/90-ssl.inc;
@@ -182,8 +183,9 @@ server {
 
 # ---------- Docker pull: کانکتور docker-group روی 5000 ----------
 server {
-    listen      443 ssl;
+    listen      443 ssl ${MIRROR_LISTEN_EXTRA};
     http2 on;
+    ${MIRROR_REALIP}
     server_name docker.${MIRROR_DOMAIN};
 
     include /etc/nginx/conf.d/90-ssl.inc;
