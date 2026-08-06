@@ -46,6 +46,12 @@ server {
 
     include /etc/nginx/conf.d/90-ssl.inc;
 
+    # کسی که در allowlist نیست و فقط دامنه را تایپ کرده، دنبال پنل است نه
+    # UI نکسس — یک ۴۰۳ خالی هیچ سرنخی به او نمی‌دهد. شرط‌هایش در
+    # 10-cache.conf توضیح داده شده. باید *قبل* از چک زیر بیاید: هر دو در
+    # فاز rewrite سطح server اجرا می‌شوند و اولین return برنده است.
+    if ($mirror_root_to_panel) { return 302 /panel; }
+
     # allowlist؛ پیش‌فرض همه را رد می‌کند تا IP خودت را اضافه کنی.
     # $mirror_block (در 10-cache.conf) همان $mirror_denied است، به‌علاوه‌ی
     # استثنای پنل وقتی MIRROR_PANEL_OPEN=1 باشد.
