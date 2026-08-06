@@ -52,6 +52,14 @@ nano nginx/acl.conf                      # ⬅️ IP سرورهایت را اض�
 ## اتصال سرورهای ایران
 
 ```bash
+sudo MIRROR_DOMAIN=mirror.example.com DISABLE_DEFAULT_SOURCES=1 ./client/setup-all.sh
+```
+
+هم apt/pip/npm/go/docker را به میرور وصل می‌کند، هم (اگر پروکسی SNI روشن
+باشد) دامنه‌های گیت‌هاب را از آن رد می‌دهد. فقط میرور، بدون دست زدن به
+`/etc/hosts`:
+
+```bash
 sudo MIRROR_DOMAIN=mirror.example.com ./client/setup-client.sh all
 ```
 

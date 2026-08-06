@@ -13,7 +13,9 @@ deploy.sh                     همه‌ی زیر را پشت‌سرهم می‌�
 bootstrap.sh                  گواهی TLS + بالا آوردن استک        (روی سرور خارج)
 provision.sh                  ساخت ریپوهای proxy + group          (روی سرور خارج)
 provision-hosted.sh           ریپوهای hosted + کاربر deployer     (روی سرور خارج)
-client/setup-client.sh        وصل کردن کلاینت‌ها                   (روی سرورهای ایران)
+client/setup-all.sh           میرور + پروکسی SNI با یک دستور       (روی سرورهای ایران)
+client/setup-client.sh        فقط کلاینت‌های پکیج                  (روی سرورهای ایران)
+client/sni/                   اسکریپت‌های /etc/hosts پروکسی SNI     (vendor از sni-https-proxy، MIT)
 nginx/acl.conf                allowlist آی‌پی — اولین بار دستی، بعد از پنل
 nginx/templates/              کانفیگ nginx (envsubst روی ${MIRROR_*}) — شامل لایه‌ی کش
 nginx/optional/               کانکتور push داکر، پیش‌فرض غیرفعال
@@ -236,18 +238,44 @@ nginx ظرف ۵ ثانیه reload می‌شوند.
 `proxy_protocol` را فقط ثابت (`on`/`off`) قبول می‌کند و روشن کردنش برای همه،
 passthrough به هاست‌های بیرونی را می‌شکند.
 
-**روی سرور ایران**، دامنه‌هایی را که می‌خواهی از پروکسی رد شوند در
-`/etc/hosts` به IP سرور خارج اشاره بده — با اسکریپت‌های خود
-[sni-https-proxy](https://github.com/iimohammad/sni-https-proxy):
+**روی سرور ایران** لازم نیست کاری جدا بکنی — `client/setup-all.sh` هم کلاینت‌های
+پکیج را به میرور وصل می‌کند و هم دامنه‌ها را از پروکسی رد می‌دهد:
 
 ```bash
-sudo bash client-server/set-hosts.sh --proxy-ip SERVER_IP \
-  github.com api.github.com raw.githubusercontent.com objects.githubusercontent.com
+sudo MIRROR_DOMAIN=mirror.example.com DISABLE_DEFAULT_SOURCES=1 ./client/setup-all.sh
 ```
 
-⚠️ دامنه‌های خود میرور را هرگز در این لیست نگذار.
+IP پروکسی را خودش از روی `MIRROR_DOMAIN` حل می‌کند (همان سرور است). قبل از
+دست زدن به `/etc/hosts` یک تست سلامت می‌زند و اگر پروکسی جواب ندهد — مثلاً
+چون IP این سرور هنوز در allowlist نیست — همان‌جا با پیام روشن متوقف می‌شود
+به‌جای اینکه `/etc/hosts` را نصفه عوض کند و گیت را بخواباند.
+
+متغیرهای مفید:
+
+| متغیر | کار |
+|---|---|
+| `SKIP_SNI=1` | فقط میرور، بدون دست زدن به `/etc/hosts` |
+| `SNI_DOMAINS="a.com b.com"` | به‌جای فهرست پیش‌فرض `client/sni/domains.sample.txt` |
+| `PROXY_IP=1.2.3.4` | اگر تشخیص خودکار درست نبود |
+
+برای برگرداندن `/etc/hosts` به حالت اول:
+
+```bash
+sudo bash client/sni/remove-hosts.sh
+```
+
+⚠️ دامنه‌های خود میرور را هرگز در فهرست `/etc/hosts` نگذار — بی‌فایده است و
+می‌تواند لوپ بسازد.
 
 برای apt/pip/npm/docker از میرور استفاده کن، نه پروکسی — کش میرور سریع‌تر است.
+فهرست پیش‌فرض دامنه‌ها آن‌ها را هم دارد، که به‌عنوان fallback بد نیست: اگر میرور
+پایین باشد، `docker pull` به‌جای شکستن از پروکسی رد می‌شود.
+
+اسکریپت‌های `client/sni/` از
+[sni-https-proxy](https://github.com/iimohammad/sni-https-proxy) (MIT،
+© Rio Antonio) vendor شده‌اند تا روی سرور ایران فقط یک مخزن لازم باشد؛ متن
+لایسنسشان در `client/sni/LICENSE` است. سمت سرورِ آن پروژه استفاده نمی‌شود —
+جایش را سرویس `sniproxy` در همین compose گرفته.
 
 ---
 
