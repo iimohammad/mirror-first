@@ -70,7 +70,7 @@ if [[ "${SELF_SIGNED:-0}" == "1" ]]; then
   # کل nginx (همراه با مسیر ACME روی پورت ۸۰) بالا نیاید.
   echo "→ صبر تا nginx واقعاً بالا بیاید"
   READY=0
-  for i in $(seq 1 15); do
+  for _ in $(seq 1 15); do
     docker compose exec -T nginx nginx -t >/dev/null 2>&1 && { READY=1; break; }
     sleep 1
   done

@@ -1,0 +1,45 @@
+# ---------------------------------------------------------------------------
+# Vendored from https://github.com/iimohammad/sni-https-proxy (MIT).
+# Copyright (c) 2026 Rio Antonio — see LICENSE in this directory.
+#
+# ⚠️ این فایل را اجرا نکن. یک نمونه است تا در docker-compose خودِ برنامه‌ات
+#    کپی کنی.
+#
+# چرا لازم است: set-hosts.sh فقط /etc/hosts هاست را عوض می‌کند، و کانتینر
+# آن را به ارث نمی‌برد. یک برنامه‌ی داکری همچنان دامنه را از DNS عمومی حل
+# می‌کند و مستقیم می‌رود — یعنی روی هاست تست می‌گیری و جواب می‌دهد، ولی
+# برنامه هیچ‌وقت از پروکسی رد نمی‌شود.
+#
+# <PROXY_IP> را با IP سرور میرور عوض کن (همان جایی که sniproxy بالاست)، و
+# فقط دامنه‌هایی را بنویس که واقعاً باید از پروکسی بروند.
+#
+# بعد از ویرایش حتماً کانتینر را *بازبساز*، نه restart:
+#
+#     docker compose up -d <service>
+#
+# چون /etc/hosts کانتینر فقط در لحظه‌ی ساخته‌شدن نوشته می‌شود؛ restart همان
+# فایل قدیمی را نگه می‌دارد.
+#
+# تأیید:
+#
+#     docker compose exec <service> getent hosts github.com
+#
+# ---------------------------------------------------------------------------
+services:
+  app:
+    image: your-image
+    extra_hosts:
+      # git clone / دانلود از گیت‌هاب
+      - "github.com:<PROXY_IP>"
+      - "api.github.com:<PROXY_IP>"
+      - "raw.githubusercontent.com:<PROXY_IP>"
+      - "objects.githubusercontent.com:<PROXY_IP>"
+
+      # APIهای مدل‌های زبانی — میرور نمی‌تواند کششان کند (هر درخواست یکتاست)
+      - "openrouter.ai:<PROXY_IP>"
+      - "api.openai.com:<PROXY_IP>"
+      - "api.anthropic.com:<PROXY_IP>"
+
+      # ⚠️ پکیج‌ها (registry.npmjs.org، pypi.org، …) را اینجا نگذار.
+      #    آن‌ها باید از خود میرور بیایند تا کش شوند؛ رد کردنشان از پروکسی
+      #    یعنی هر بار دانلود کامل از اینترنت.
