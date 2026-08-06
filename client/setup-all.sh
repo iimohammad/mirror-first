@@ -74,4 +74,14 @@ cat <<EOF
 تست:
   apt-get update
   git clone https://github.com/OWNER/REPO.git
+
+⚠️  برنامه‌هایی که خودشان داخل داکر اجرا می‌شوند این تنظیم را نمی‌بینند:
+    کانتینر /etc/hosts هاست را به ارث نمی‌برد. برای هر سرویسی که باید از
+    پروکسی رد شود، در docker-compose خودش اضافه کن:
+
+      extra_hosts:
+        - "openrouter.ai:$PROXY_IP"
+
+    و بعد: docker compose up -d <service>   (restart کافی نیست، باید
+    کانتینر دوباره ساخته شود تا /etc/hosts جدید بگیرد)
 EOF

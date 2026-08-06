@@ -18,3 +18,14 @@ files.pythonhosted.org
 proxy.golang.org
 sum.golang.org
 storage.googleapis.com
+
+# APIهای مدل‌های زبانی. این‌ها را میرور نمی‌تواند کش کند (هر درخواست یکتاست)،
+# پس فقط از مسیر passthrough پروکسی SNI رد می‌شوند.
+#
+# ⚠️ اگر برنامه‌ای که این APIها را صدا می‌زند داخل داکر است، این فایل کافی نیست:
+#    کانتینر /etc/hosts هاست را نمی‌بیند. باید در سرویسِ خودش هم بنویسی:
+#      extra_hosts:
+#        - "openrouter.ai:<PROXY_IP>"
+openrouter.ai
+api.openai.com
+api.anthropic.com
