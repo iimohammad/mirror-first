@@ -88,7 +88,7 @@ curl --noproxy '*' --resolve github.com:443:<PROXY_IP> \
 | علامت | علت | کار |
 |---|---|---|
 | `403` روی `/repository/…` | آی‌پی در `acl.conf` نیست | پنل → IPs |
-| `403` روی `/` | درست است | ریشه مخزن نیست؛ `/panel` را باز کن |
+| `403` روی `/` | `MIRROR_PANEL_OPEN` خاموش است | با `1` ریشه به `/panel` ریدایرکت می‌شود |
 | timeout روی پروکسی | آی‌پی در `sni-allow.conf` نیست | پنل → IPs |
 | `git pull` هنگ می‌کند | ریموت SSH است، پروکسی فقط ۴۴۳ | `git remote set-url origin https://github.com/…` |
 | برنامه‌ی داکری مستقیم می‌رود | کانتینر `/etc/hosts` هاست را ارث نمی‌برد | `extra_hosts:` در compose خودش، بعد `up -d` (نه `restart`) |
