@@ -79,6 +79,13 @@ services:
       MIRROR_RATE_LIMIT:       "${MIRROR_RATE_LIMIT:-100r/s}"
       MIRROR_RATE_BURST:       "${MIRROR_RATE_BURST:-500}"
       MIRROR_CONN_LIMIT:       "${MIRROR_CONN_LIMIT:-200}"
+
+      # ─── پنلِ باز ──────────────────────────────────────────────────────
+      # 1 یعنی /panel از allowlist مستثنا شود (مخازن همچنان بسته می‌مانند).
+      # برای وقتی که IP خودت ثابت نیست و مدام از پنل بیرون می‌افتی.
+      MIRROR_PANEL_OPEN:       "${MIRROR_PANEL_OPEN:-0}"
+      MIRROR_PANEL_LOGIN_RATE: "${MIRROR_PANEL_LOGIN_RATE:-20r/m}"
+      MIRROR_PANEL_LOGIN_BURST: "${MIRROR_PANEL_LOGIN_BURST:-10}"
     volumes:
       - ./nginx/templates:/etc/nginx/templates:ro
       - ./nginx/acl.conf:/etc/nginx/conf.d/00-acl.conf:ro

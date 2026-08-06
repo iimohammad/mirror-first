@@ -46,7 +46,9 @@ server {
     include /etc/nginx/conf.d/90-ssl.inc;
 
     # allowlist؛ پیش‌فرض همه را رد می‌کند تا IP خودت را اضافه کنی.
-    if ($mirror_denied) { return 403; }
+    # $mirror_block (در 10-cache.conf) همان $mirror_denied است، به‌علاوه‌ی
+    # استثنای پنل وقتی MIRROR_PANEL_OPEN=1 باشد.
+    if ($mirror_block) { return 403; }
 
     # اگر IP ثابت نداری، به‌جای allowlist این دو خط را باز کن و
     # htpasswd را در nginx/ بساز و در compose مانتش کن:
@@ -87,6 +89,17 @@ server {
     # ^~ یعنی اگر این prefix برنده شد، دیگر سراغ locationهای regex نرو —
     # هیچ‌کدام از قواعد کش نباید به دارایی‌های استاتیک پنل دست بزنند.
     # auth پنل جدا از همین allowlist است (لاگین با یوزر/پس ادمین Nexus).
+    # صفحه‌ی لاگین سهمیه‌ی خیلی سخت‌گیرانه‌تری دارد، چون با
+    # MIRROR_PANEL_OPEN=1 از اینترنت باز است و تنها چیزی که پشتش می‌ماند رمز
+    # ادمین نکسس است. «=» یعنی تطابق دقیق، پس فقط خود این آدرس را می‌گیرد و
+    # دارایی‌های /panel/_next/... با این سهمیه درگیر نمی‌شوند.
+    location = /panel/login {
+        limit_req zone=panel_login burst=${MIRROR_PANEL_LOGIN_BURST} nodelay;
+        proxy_pass http://$panel_upstream;
+        include /etc/nginx/conf.d/91-proxy.inc;
+        proxy_buffering off;
+    }
+
     location ^~ /panel {
         proxy_pass http://$panel_upstream;
         include /etc/nginx/conf.d/91-proxy.inc;
