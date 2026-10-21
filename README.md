@@ -117,6 +117,9 @@ https://mirror.example.com/panel/
   آپلود نمی‌شود؛ `docker push` بزن (PACKAGES.md).
 - **دیسک** (`/panel/disk`) — مصرف `nexus_data` و کش nginx، وضعیت blob storeها،
   اجرای دستی تسک‌های Cleanup.
+- **اتصال سرورها** (`/panel/connect`) — دستورات آماده‌ی اتصال سرورهای ایران
+  (apt/pip/npm/go/docker/containerd/SNI) با دکمه‌ی کپی؛ دامنه از `MIRROR_DOMAIN`
+  در `.env` داخلشان جایگذاری می‌شود.
 
 نیاز به یک متغیر در `.env`:
 

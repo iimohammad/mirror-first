@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Cable,
   FolderUp,
   Globe,
   HardDrive,
@@ -31,6 +32,7 @@ const NAV_ITEMS = [
   { title: "پکیج‌ها", url: "/packages", icon: Package },
   { title: "آپلود", url: "/upload", icon: FolderUp },
   { title: "دیسک و Cleanup", url: "/disk", icon: HardDrive },
+  { title: "اتصال سرورها", url: "/connect", icon: Cable },
 ];
 
 export function AppSidebar({ username }: { username: string }) {
