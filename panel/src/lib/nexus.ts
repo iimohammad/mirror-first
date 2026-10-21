@@ -46,6 +46,20 @@ export async function verifyAdminCreds(creds: NexusCreds): Promise<boolean> {
   }
 }
 
+export interface NexusStatus {
+  version?: string;
+  edition?: string;
+}
+
+// برای داشبورد — null یعنی نکسس در دسترس نیست.
+export async function getStatus(creds: NexusCreds): Promise<NexusStatus | null> {
+  try {
+    return await nexusJson<NexusStatus>(creds, "/service/rest/v1/status");
+  } catch {
+    return null;
+  }
+}
+
 export interface RepoSummary {
   name: string;
   format: string;

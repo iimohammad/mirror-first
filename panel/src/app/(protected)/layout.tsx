@@ -1,6 +1,8 @@
-import Link from "next/link";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { Separator } from "@/components/ui/separator";
+import { AppSidebar } from "@/components/app-sidebar";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { requireSession } from "@/lib/session";
-import { logout } from "./logout/actions";
 
 export default async function ProtectedLayout({
   children,
@@ -10,24 +12,21 @@ export default async function ProtectedLayout({
   const session = await requireSession();
 
   return (
-    <div className="shell">
-      <aside className="sidebar">
-        <h1>پنل میرور</h1>
-        <Link href="/">داشبورد</Link>
-        <Link href="/ips">مدیریت IP</Link>
-        <Link href="/packages">پکیج‌ها</Link>
-        <Link href="/upload">آپلود</Link>
-        <Link href="/disk">دیسک و Cleanup</Link>
-        <form action={logout}>
-          <p className="muted" style={{ marginBottom: 8, marginTop: 16 }}>
-            {session.username}
-          </p>
-          <button type="submit" style={{ width: "100%" }}>
-            خروج
-          </button>
-        </form>
-      </aside>
-      <main className="main">{children}</main>
-    </div>
+    <SidebarProvider>
+      <AppSidebar username={session.username} />
+      <SidebarInset>
+        <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-2 border-b bg-background/80 px-4 backdrop-blur">
+          <SidebarTrigger className="-ms-2" />
+          <Separator orientation="vertical" className="me-2 h-4!" />
+          <span className="text-sm text-muted-foreground">مدیریت میرور پکیج‌ها</span>
+          <div className="ms-auto">
+            <ThemeToggle />
+          </div>
+        </header>
+        <main className="flex-1 p-4 md:p-6">
+          <div className="mx-auto w-full max-w-5xl">{children}</div>
+        </main>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }

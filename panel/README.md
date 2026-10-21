@@ -18,6 +18,9 @@
 - **بدون دیتابیس.** IPها و سشن‌ها در دو فایل JSON روی یک Docker volume
   (`panel_data`) نگه داشته می‌شوند (`src/lib/json-store.ts`). حجم داده
   (چند ده IP، چند سشن) خیلی کمتر از آن است که SQLite/native module بخواهد.
+- **UI** با Tailwind CSS v4 + shadcn/ui (پرست Nova، کامپوننت‌ها در
+  `src/components/ui/`)، فونت وزیرمتن از next/font، تم روشن/تاریک با
+  next-themes و DirectionProvider رادیکس برای RTL درست Select/Menu ها.
 
 ## احراز هویت
 
@@ -86,12 +89,22 @@ nginx خودش بلاک `geo` را فقط در بوت/reload می‌خواند. 
 
 ## توسعه‌ی محلی
 
+UI با Tailwind CSS v4 و shadcn/ui ساخته شده (RTL، فونت وزیرمتن، تم
+روشن/تاریک). برای توسعه بدون داکر و بدون نکسس واقعی، یک mock سرور همراه
+ریپو هست:
+
 ```bash
 cd panel
 npm install
-npm run dev       # روی http://localhost:3000/panel
+npm run mock      # ترمینال ۱ — mock نکسس روی http://127.0.0.1:9191
+npm run dev       # ترمینال ۲ — پنل روی http://localhost:3000/panel
 ```
 
-بدون یک Nexus واقعی در دسترس (`NEXUS_URL`)، لاگین و صفحات پکیج/دیسک کار
-نمی‌کنند؛ صفحه‌ی IP چون فقط JSON محلی می‌خواند مستقل کار می‌کند اما بدون
-سشن معتبر اصلاً به آن نمی‌رسی (احراز هویت لازم است).
+`.env.local` (گیت‌نمی‌شود) پنل را به mock وصل می‌کند و JSON storeها را
+زیر `.local-data` می‌گذارد. یوزر/پس mock: `admin` / `admin123`. ریپوها،
+کامپوننت‌ها، blob store و تسک‌های نمونه داخل `mock/mock-nexus.mjs` تعریف
+شده‌اند — برای تست صفحه‌بندی، `PAGE_SIZE` بالای همان فایل را کم کن.
+
+بدون mock هم می‌شود `NEXUS_URL` را به یک نکسس واقعی داد؛ صفحه‌ی IP چون فقط
+JSON محلی می‌خواند مستقل کار می‌کند اما بدون سشن معتبر اصلاً به آن نمی‌رسی
+(احراز هویت لازم است).

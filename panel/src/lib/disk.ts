@@ -8,8 +8,8 @@ const execFileAsync = promisify(execFile);
 export interface DiskInfo {
   nexusDataBytes: number | null;
   nginxCacheBytes: number | null;
-  filesystemTotalBytes: number;
-  filesystemFreeBytes: number;
+  filesystemTotalBytes: number | null;
+  filesystemFreeBytes: number | null;
 }
 
 // busybox du از -b (بایت) پشتیبانی نمی‌کند، فقط -k (کیلوبایت) — قابل
@@ -21,8 +21,10 @@ async function duBytes(path: string): Promise<number | null> {
 }
 
 export async function getDiskInfo(): Promise<DiskInfo> {
-  const [fsStat, nexusDataBytes, nginxCacheBytes] = await Promise.all([
-    statfs(NEXUS_DATA_PATH),
+  // statfs در لوکال/ویندوز یا قبل از اولین بالا آمدن والیوم‌ها ممکن است
+  // مسیر را پیدا نکند — null یعنی «الان در دسترس نیست»، نه بهانه برای 500.
+  const fsStat = await statfs(NEXUS_DATA_PATH).catch(() => null);
+  const [nexusDataBytes, nginxCacheBytes] = await Promise.all([
     duBytes(NEXUS_DATA_PATH),
     // تا اولین بار که nginx بالا بیاید این مسیر وجود ندارد؛ null یعنی
     // «هنوز چیزی نیست»، نه خطا.
@@ -32,7 +34,7 @@ export async function getDiskInfo(): Promise<DiskInfo> {
   return {
     nexusDataBytes,
     nginxCacheBytes,
-    filesystemTotalBytes: fsStat.blocks * fsStat.bsize,
-    filesystemFreeBytes: fsStat.bavail * fsStat.bsize,
+    filesystemTotalBytes: fsStat ? fsStat.blocks * fsStat.bsize : null,
+    filesystemFreeBytes: fsStat ? fsStat.bavail * fsStat.bsize : null,
   };
 }
