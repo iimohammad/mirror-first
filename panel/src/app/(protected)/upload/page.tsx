@@ -2,6 +2,7 @@ import { FolderUp } from "lucide-react";
 import { requireSession } from "@/lib/session";
 import { listRepositories, type UploadableFormat } from "@/lib/nexus";
 import { uploadAction } from "./actions";
+import { PublishCli } from "./publish-cli";
 import { SubmitButton } from "@/components/submit-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -115,6 +116,19 @@ export default async function UploadPage({
           </CardContent>
         </Card>
       )}
+
+      <div className="mt-2">
+        <h2 className="text-lg font-semibold">همین کارها از ترمینال</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          بدون فرم و مرورگر — کش‌کردن پکیج عمومی یا انتشار پکیج خودت، با دستورات
+          لینوکسی آماده.
+        </p>
+        <div className="mt-4">
+          <PublishCli
+            defaultDomain={process.env.MIRROR_DOMAIN ?? "mirror.example.com"}
+          />
+        </div>
+      </div>
     </div>
   );
 }
